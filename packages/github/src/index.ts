@@ -2,6 +2,7 @@
 export { githubRequest } from "./client";
 export type { PullRequest } from "./pull-request";
 export {
+  addLabelsToPullRequest,
   createPullRequest,
   findOpenPullRequest,
   getPullRequest,

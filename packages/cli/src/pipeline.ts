@@ -23,6 +23,7 @@ export interface PipelineResult {
   bumps: VersionBump[];
   isMonorepo: boolean;
   tagFormat: string;
+  prLabels: string[];
 }
 
 export async function runPipeline(cwd: string, options?: PipelineOptions): Promise<PipelineResult> {
@@ -130,5 +131,7 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     bumps = applyVersionGroups(bumps, packages, config.groups);
   }
 
-  return { packages, bumps, isMonorepo, tagFormat };
+  const prLabels = config?.prLabels ?? ["autorelease: pending"];
+
+  return { packages, bumps, isMonorepo, tagFormat, prLabels };
 }

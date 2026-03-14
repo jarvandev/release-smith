@@ -74,3 +74,24 @@ export async function getPullRequest(
   });
   return (await response.json()) as PullRequest;
 }
+
+export async function addLabelsToPullRequest(
+  owner: string,
+  repo: string,
+  number: number,
+  labels: string[],
+  token: string,
+): Promise<void> {
+  if (labels.length === 0) return;
+  try {
+    await githubRequest(
+      "POST",
+      `/repos/${owner}/${repo}/issues/${number}/labels`,
+      { token },
+      { labels },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Warning: Failed to add labels to PR #${number}: ${message}`);
+  }
+}

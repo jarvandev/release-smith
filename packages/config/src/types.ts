@@ -21,6 +21,8 @@ export interface RawConfig {
   tagFormat?: string;
   /** Version groups for monorepo version alignment. */
   groups?: VersionGroups;
+  /** Labels to add to Release PRs. Defaults to ["autorelease: pending"]. */
+  prLabels?: string[];
 }
 
 export interface VersionGroups {

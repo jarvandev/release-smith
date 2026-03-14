@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  addLabelsToPullRequest,
   createPullRequest,
   findOpenPullRequest,
   getPullRequest,
@@ -126,6 +127,57 @@ describe("getPullRequest", () => {
       expect(capturedUrl).toContain("/repos/owner/repo/pulls/10");
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("addLabelsToPullRequest", () => {
+  it("sends POST to issues labels endpoint", async () => {
+    let capturedUrl = "";
+    let capturedBody: Record<string, unknown> = {};
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = typeof input === "string" ? input : input.toString();
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+    try {
+      await addLabelsToPullRequest("owner", "repo", 42, ["release", "autorelease: pending"], "tk");
+      expect(capturedUrl).toContain("/repos/owner/repo/issues/42/labels");
+      expect(capturedBody.labels).toEqual(["release", "autorelease: pending"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("skips when labels array is empty", async () => {
+    let fetchCalled = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      return new Response("", { status: 200 });
+    };
+    try {
+      await addLabelsToPullRequest("o", "r", 1, [], "tk");
+      expect(fetchCalled).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("warns on failure without throwing", async () => {
+    const originalFetch = globalThis.fetch;
+    const logs: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (msg: string) => logs.push(msg);
+    globalThis.fetch = async () => new Response("Not Found", { status: 404 });
+    try {
+      await addLabelsToPullRequest("o", "r", 1, ["missing"], "tk");
+      expect(logs.length).toBeGreaterThan(0);
+      expect(logs[0]).toContain("Warning");
+    } finally {
+      globalThis.fetch = originalFetch;
+      console.warn = originalWarn;
     }
   });
 });

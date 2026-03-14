@@ -7,6 +7,7 @@ import {
 } from "@release-smith/core";
 import { execGit } from "@release-smith/git";
 import {
+  addLabelsToPullRequest,
   createPullRequest,
   findOpenPullRequest,
   parseGitHubUrl,
@@ -21,6 +22,7 @@ interface ReleasePROptions {
   branch: string;
   dryRun: boolean;
   tagFormat?: string;
+  prLabels?: string[];
 }
 
 export async function runReleasePR(options: ReleasePROptions): Promise<void> {
@@ -85,6 +87,7 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
       token,
     );
 
+    let prNumber: number;
     if (existing) {
       const updated = await updatePullRequest(
         ghInfo.owner,
@@ -94,6 +97,7 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
         body,
         token,
       );
+      prNumber = updated.number;
       console.log(`\nRelease PR updated: ${updated.html_url}`);
     } else {
       const created = await createPullRequest(
@@ -105,7 +109,13 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
         body,
         token,
       );
+      prNumber = created.number;
       console.log(`\nRelease PR created: ${created.html_url}`);
+    }
+
+    const labels = options.prLabels ?? [];
+    if (labels.length > 0) {
+      await addLabelsToPullRequest(ghInfo.owner, ghInfo.repo, prNumber, labels, token);
     }
   } finally {
     // Always switch back to the original branch
