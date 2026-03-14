@@ -63,6 +63,7 @@ export default defineCommand({
       packages,
       bumps: allBumps,
       isMonorepo,
+      tagFormat,
     } = await runPipeline(args.cwd, { prerelease: args.prerelease });
 
     let bumps = allBumps;
@@ -87,6 +88,7 @@ export default defineCommand({
         isMonorepo,
         branch: args.branch,
         dryRun,
+        tagFormat,
       });
       return;
     }
@@ -102,7 +104,14 @@ export default defineCommand({
       console.log(`${bump.packageName}: ${bump.currentVersion} -> ${bump.newVersion}${suffix}`);
     }
 
-    const results = await executeRelease({ cwd: args.cwd, bumps, packages, dryRun, isMonorepo });
+    const results = await executeRelease({
+      cwd: args.cwd,
+      bumps,
+      packages,
+      dryRun,
+      isMonorepo,
+      tagFormat,
+    });
 
     if (!dryRun) {
       console.log("\nRelease complete!");

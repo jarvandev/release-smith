@@ -49,7 +49,7 @@ describe("getLatestVersionTag", () => {
   });
 
   it("returns null when no version tags", async () => {
-    const tag = await getLatestVersionTag(tempDir, null);
+    const tag = await getLatestVersionTag(tempDir, "v");
     expect(tag).toBeNull();
   });
 
@@ -59,7 +59,7 @@ describe("getLatestVersionTag", () => {
     await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
     await Bun.spawn(["git", "commit", "-m", "more"], { cwd: tempDir }).exited;
     await Bun.spawn(["git", "tag", "v1.1.0"], { cwd: tempDir }).exited;
-    const tag = await getLatestVersionTag(tempDir, null);
+    const tag = await getLatestVersionTag(tempDir, "v");
     expect(tag).toBe("v1.1.0");
   });
 
@@ -70,8 +70,18 @@ describe("getLatestVersionTag", () => {
     await Bun.spawn(["git", "commit", "-m", "more"], { cwd: tempDir }).exited;
     await Bun.spawn(["git", "tag", "@myapp/cli@1.2.0"], { cwd: tempDir }).exited;
     await Bun.spawn(["git", "tag", "@myapp/core@2.0.0"], { cwd: tempDir }).exited;
-    const tag = await getLatestVersionTag(tempDir, "@myapp/cli");
+    const tag = await getLatestVersionTag(tempDir, "@myapp/cli@");
     expect(tag).toBe("@myapp/cli@1.2.0");
+  });
+
+  it("finds tags with custom prefix", async () => {
+    await Bun.spawn(["git", "tag", "release-1.0.0"], { cwd: tempDir }).exited;
+    await writeFile(join(tempDir, "file2.txt"), "more");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "more"], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "tag", "release-2.0.0"], { cwd: tempDir }).exited;
+    const tag = await getLatestVersionTag(tempDir, "release-");
+    expect(tag).toBe("release-2.0.0");
   });
 });
 

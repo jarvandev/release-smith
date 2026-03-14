@@ -10,24 +10,14 @@ export async function getTags(cwd: string): Promise<string[]> {
   }
 }
 
-export async function getLatestVersionTag(
-  cwd: string,
-  packageName: string | null,
-): Promise<string | null> {
+export async function getLatestVersionTag(cwd: string, tagPrefix: string): Promise<string | null> {
   const tags = await getTags(cwd);
   const versionRegex = /^(\d+)\.(\d+)\.(\d+)$/;
 
   const parsed = tags
     .map((tag) => {
-      let version: string;
-      if (packageName) {
-        const prefix = `${packageName}@`;
-        if (!tag.startsWith(prefix)) return null;
-        version = tag.slice(prefix.length);
-      } else {
-        if (!tag.startsWith("v")) return null;
-        version = tag.slice(1);
-      }
+      if (!tag.startsWith(tagPrefix)) return null;
+      const version = tag.slice(tagPrefix.length);
       const match = version.match(versionRegex);
       if (!match?.[1] || !match[2] || !match[3]) return null;
       return {
@@ -37,7 +27,12 @@ export async function getLatestVersionTag(
         patch: parseInt(match[3], 10),
       };
     })
-    .filter(Boolean) as Array<{ tag: string; major: number; minor: number; patch: number }>;
+    .filter(Boolean) as Array<{
+    tag: string;
+    major: number;
+    minor: number;
+    patch: number;
+  }>;
 
   if (parsed.length === 0) return null;
 

@@ -14,6 +14,11 @@ export interface RawConfig {
   packages?: Record<string, Partial<Pick<PackageConfig, "publish" | "changelog">>>;
   /** Branch-based release configuration. Maps branch names to release behavior. */
   branches?: Record<string, BranchConfig>;
+  /**
+   * Tag name format template. Supports `{version}` and `{name}` placeholders.
+   * Defaults: single package = `"v{version}"`, monorepo = `"{name}@{version}"`.
+   */
+  tagFormat?: string;
 }
 
 export interface ResolvedPackage {

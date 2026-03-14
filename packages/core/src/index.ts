@@ -11,6 +11,7 @@ export {
   updatePackageVersion,
   updateWorkspaceDeps,
 } from "./releaser";
+export { formatTagName, resolveTagFormat, resolveTagPrefix } from "./tag-format";
 export type {
   BumpLevel,
   ChangelogEntry,

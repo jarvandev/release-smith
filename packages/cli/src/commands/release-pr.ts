@@ -20,6 +20,7 @@ interface ReleasePROptions {
   isMonorepo: boolean;
   branch: string;
   dryRun: boolean;
+  tagFormat?: string;
 }
 
 export async function runReleasePR(options: ReleasePROptions): Promise<void> {
@@ -58,7 +59,13 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
 
   try {
     // Apply file changes (version bumps, changelogs, workspace deps)
-    const results = await applyReleaseChanges({ cwd, bumps, packages, isMonorepo });
+    const results = await applyReleaseChanges({
+      cwd,
+      bumps,
+      packages,
+      isMonorepo,
+      tagFormat: options.tagFormat,
+    });
     const commitMsg = buildCommitMessage(results);
 
     await execGit(["add", "-A"], cwd);

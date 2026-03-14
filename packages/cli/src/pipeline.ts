@@ -6,6 +6,8 @@ import {
   detectCircularDeps,
   type PrereleaseOptions,
   parseConventionalCommit,
+  resolveTagFormat,
+  resolveTagPrefix,
   type VersionBump,
 } from "@release-smith/core";
 import { execGit, getChangedFiles, getCommits, getLatestVersionTag } from "@release-smith/git";
@@ -19,19 +21,14 @@ export interface PipelineResult {
   packages: ResolvedPackage[];
   bumps: VersionBump[];
   isMonorepo: boolean;
-}
-
-function extractVersionFromTag(tag: string, packageName: string | null): string {
-  if (packageName) {
-    return tag.slice(packageName.length + 1);
-  }
-  return tag.slice(1);
+  tagFormat: string;
 }
 
 export async function runPipeline(cwd: string, options?: PipelineOptions): Promise<PipelineResult> {
   const config = await loadConfig(cwd);
   const packages = await discoverPackages(cwd, config);
   const isMonorepo = packages.length > 1 || packages[0]?.path !== ".";
+  const tagFormat = resolveTagFormat(config?.tagFormat, isMonorepo);
 
   // Resolve pre-release: CLI flag takes precedence, then branch config
   let preid = options?.prerelease;
@@ -52,8 +49,8 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   let hasPackageWithNoTag = false;
 
   for (const pkg of packages) {
-    const pkgName = isMonorepo ? pkg.name : null;
-    const tag = await getLatestVersionTag(cwd, pkgName);
+    const prefix = resolveTagPrefix(tagFormat, pkg.name);
+    const tag = await getLatestVersionTag(cwd, prefix);
     packageTags.set(pkg.path, tag);
     if (tag === null) {
       hasPackageWithNoTag = true;
@@ -116,8 +113,8 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     for (const pkg of packages) {
       const tag = packageTags.get(pkg.path);
       if (tag) {
-        const pkgName = isMonorepo ? pkg.name : null;
-        lastStableVersions.set(pkg.path, extractVersionFromTag(tag, pkgName));
+        const prefix = resolveTagPrefix(tagFormat, pkg.name);
+        lastStableVersions.set(pkg.path, tag.slice(prefix.length));
       } else {
         // No stable tag: strip prerelease suffix from package.json version
         lastStableVersions.set(pkg.path, pkg.version.replace(/-.*$/, ""));
@@ -127,5 +124,5 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   }
 
   const bumps = calculateVersionBumps(packages, filteredPackageCommits, prereleaseOpts);
-  return { packages, bumps, isMonorepo };
+  return { packages, bumps, isMonorepo, tagFormat };
 }

@@ -4,6 +4,7 @@ import type { ResolvedPackage } from "@release-smith/config";
 import { createTag, execGit } from "@release-smith/git";
 import { createGitHubRelease, parseGitHubUrl } from "@release-smith/github";
 import { generateChangelog, insertChangelog } from "./changelog-generator";
+import { formatTagName, resolveTagFormat } from "./tag-format";
 import type { ReleaseResult, VersionBump } from "./types";
 
 export async function updatePackageVersion(packageDir: string, newVersion: string): Promise<void> {
@@ -50,8 +51,10 @@ export async function applyReleaseChanges(options: {
   bumps: VersionBump[];
   packages: ResolvedPackage[];
   isMonorepo: boolean;
+  tagFormat?: string;
 }): Promise<ReleaseResult[]> {
   const { cwd, bumps, packages, isMonorepo } = options;
+  const format = resolveTagFormat(options.tagFormat, isMonorepo);
   if (bumps.length === 0) return [];
 
   const date = new Date().toISOString().slice(0, 10);
@@ -70,7 +73,7 @@ export async function applyReleaseChanges(options: {
 
   for (const bump of bumps) {
     const changelog = generateChangelog(bump, date, repoUrl);
-    const tagName = isMonorepo ? `${bump.packageName}@${bump.newVersion}` : `v${bump.newVersion}`;
+    const tagName = formatTagName(format, bump.packageName, bump.newVersion);
 
     const pkgDir = join(cwd, bump.packagePath);
     await updatePackageVersion(pkgDir, bump.newVersion);
@@ -138,8 +141,10 @@ export async function executeRelease(options: {
   packages: ResolvedPackage[];
   dryRun: boolean;
   isMonorepo: boolean;
+  tagFormat?: string;
 }): Promise<ReleaseResult[]> {
   const { cwd, bumps, packages, dryRun, isMonorepo } = options;
+  const format = resolveTagFormat(options.tagFormat, isMonorepo);
   if (bumps.length === 0) return [];
 
   if (dryRun) {
@@ -157,11 +162,17 @@ export async function executeRelease(options: {
       packagePath: bump.packagePath,
       version: bump.newVersion,
       changelog: generateChangelog(bump, date, repoUrl),
-      tagName: isMonorepo ? `${bump.packageName}@${bump.newVersion}` : `v${bump.newVersion}`,
+      tagName: formatTagName(format, bump.packageName, bump.newVersion),
     }));
   }
 
-  const results = await applyReleaseChanges({ cwd, bumps, packages, isMonorepo });
+  const results = await applyReleaseChanges({
+    cwd,
+    bumps,
+    packages,
+    isMonorepo,
+    tagFormat: options.tagFormat,
+  });
 
   await execGit(["add", "-A"], cwd);
   await execGit(["commit", "-m", buildCommitMessage(results)], cwd);
