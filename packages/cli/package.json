@@ -7,13 +7,22 @@
     "release-smith": "dist/index.js"
   },
   "files": [
-    "dist/index.js"
+    "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jarvandev/release-smith.git",
     "directory": "packages/cli"
   },
+  "homepage": "https://github.com/jarvandev/release-smith",
+  "bugs": "https://github.com/jarvandev/release-smith/issues",
   "keywords": [
     "release",
     "changelog",
@@ -34,7 +43,6 @@
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
     "build": "bun build src/index.ts --outdir dist --target node",
-    "build:compile": "bun build src/index.ts --compile --outfile dist/release-smith",
-    "prepublishOnly": "bun run build"
+    "build:compile": "bun build src/index.ts --compile --outfile dist/release-smith"
   }
 }

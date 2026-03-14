@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -20,8 +21,10 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Build CLI
-        run: bun run build
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Run release-smith
         env:
@@ -33,14 +36,17 @@ jobs:
           git push
           git push --tags
 
-      - name: Publish all packages to npm
+      - name: Build CLI
+        run: bun run build
+
+      - name: Verify package contents
+        working-directory: packages/cli
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        working-directory: packages/cli
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          for pkg in packages/config packages/git packages/github packages/core packages/cli; do
-            echo "Publishing $pkg..."
-            cd "$pkg"
-            bun publish --access public || true
-            cd -
-          done
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          npm publish --access public

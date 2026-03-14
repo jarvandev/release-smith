@@ -1,6 +1,7 @@
 {
   "name": "@release-smith/core",
   "version": "0.1.0",
+  "private": true,
   "description": "Core pipeline logic for release-smith",
   "type": "module",
   "main": "src/index.ts",

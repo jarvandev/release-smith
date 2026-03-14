@@ -1,19 +1,9 @@
 {
   "packages": {
-    "packages/config": {
-      "publish": true
-    },
-    "packages/git": {
-      "publish": true
-    },
-    "packages/github": {
-      "publish": true
-    },
-    "packages/core": {
-      "publish": true
-    },
-    "packages/cli": {
-      "publish": true
-    }
+    "packages/config": { "publish": false },
+    "packages/git": { "publish": false },
+    "packages/github": { "publish": false },
+    "packages/core": { "publish": false },
+    "packages/cli": { "publish": true }
   }
 }

@@ -1,6 +1,7 @@
 {
   "name": "@release-smith/github",
   "version": "0.1.0",
+  "private": true,
   "description": "GitHub API client for release-smith",
   "type": "module",
   "main": "src/index.ts",
