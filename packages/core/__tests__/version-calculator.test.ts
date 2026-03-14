@@ -197,6 +197,108 @@ describe("calculateVersionBumps", () => {
     expect(bumps[0].commits).toHaveLength(2);
   });
 
+  it("rolls up breaking change from unpublished dep as major", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(packages, [
+      {
+        packagePath: "packages/core",
+        commit: makeCommit({ type: "feat", breaking: true, description: "rewrite API" }),
+      },
+    ]);
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].newVersion).toBe("2.0.0");
+    expect(bumps[0].level).toBe("major");
+  });
+
+  it("rolls up commits from multiple unpublished deps", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({ name: "@myapp/utils", path: "packages/utils", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core", "@myapp/utils"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(packages, [
+      { packagePath: "packages/core", commit: makeCommit({ hash: "aaa", type: "feat" }) },
+      { packagePath: "packages/utils", commit: makeCommit({ hash: "bbb", type: "fix" }) },
+    ]);
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].newVersion).toBe("1.1.0"); // feat wins
+    expect(bumps[0].commits).toHaveLength(2);
+  });
+
+  it("deduplicates commits touching both parent and unpublished dep", () => {
+    const sharedCommit = makeCommit({ hash: "shared1", type: "feat", description: "refactor" });
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(packages, [
+      { packagePath: "packages/core", commit: sharedCommit },
+      { packagePath: "packages/cli", commit: sharedCommit },
+    ]);
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].commits).toHaveLength(1);
+    expect(bumps[0].commits[0].hash).toBe("shared1");
+  });
+
+  it("does not bump when unpublished dep has only non-bump commits", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(packages, [
+      {
+        packagePath: "packages/core",
+        commit: makeCommit({ type: "chore", description: "update deps" }),
+      },
+    ]);
+    // chore does not produce a bump level, so no bump for core,
+    // which means no propagation and no rollup
+    expect(bumps).toHaveLength(0);
+  });
+
+  it("rolls up with prerelease mode", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(
+      packages,
+      [{ packagePath: "packages/core", commit: makeCommit({ type: "feat" }) }],
+      { preid: "beta", lastStableVersions: new Map([["packages/cli", "1.0.0"]]) },
+    );
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].newVersion).toBe("1.1.0-beta.0");
+    expect(bumps[0].commits).toHaveLength(1);
+  });
+
   it("direct bump over propagated", () => {
     const packages = [
       makePackage({ name: "@myapp/core", path: "packages/core", publish: true }),
