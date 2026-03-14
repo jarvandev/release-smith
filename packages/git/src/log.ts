@@ -26,11 +26,10 @@ export async function getCommits(
     .map((chunk) => chunk.trim())
     .filter(Boolean)
     .map((chunk) => {
-      const [hash, message, ...bodyParts] = chunk.split(FIELD_SEP);
-      return {
-        hash: hash.trim(),
-        message: message.trim(),
-        body: bodyParts.join(FIELD_SEP).trim(),
-      };
+      const parts = chunk.split(FIELD_SEP);
+      const hash = parts[0] ?? "";
+      const message = parts[1] ?? "";
+      const body = parts.slice(2).join(FIELD_SEP).trim();
+      return { hash: hash.trim(), message: message.trim(), body };
     });
 }

@@ -96,9 +96,10 @@ export async function executeRelease(options: {
 
   if (!dryRun) {
     await execGit(["add", "-A"], cwd);
+    const first = results[0];
     const commitMsg =
-      results.length === 1
-        ? `chore(release): ${results[0].packageName}@${results[0].version}`
+      first && results.length === 1
+        ? `chore(release): ${first.packageName}@${first.version}`
         : `chore(release): ${results.map((r) => `${r.packageName}@${r.version}`).join(", ")}`;
     await execGit(["commit", "-m", commitMsg], cwd);
     for (const result of results) await execGit(["tag", result.tagName], cwd);

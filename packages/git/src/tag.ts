@@ -29,7 +29,7 @@ export async function getLatestVersionTag(
         version = tag.slice(1);
       }
       const match = version.match(versionRegex);
-      if (!match) return null;
+      if (!match?.[1] || !match[2] || !match[3]) return null;
       return {
         tag,
         major: parseInt(match[1], 10),
@@ -47,7 +47,7 @@ export async function getLatestVersionTag(
     return b.patch - a.patch;
   });
 
-  return parsed[0].tag;
+  return parsed[0]?.tag ?? null;
 }
 
 export async function createTag(cwd: string, tag: string): Promise<void> {

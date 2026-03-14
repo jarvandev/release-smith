@@ -8,7 +8,7 @@
     "dev": "bun run packages/cli/src/index.ts",
     "test": "bun test --recursive",
     "test:watch": "bun test --recursive --watch",
-    "typecheck": "bash -c 'for pkg in packages/*/tsconfig.json; do echo \"typecheck: $pkg\"; bunx tsc --noEmit -p \"$pkg\" || exit 1; done'",
+    "typecheck": "bash -c 'for pkg in packages/{config,git,core,github,cli}/tsconfig.json; do echo \"typecheck: $pkg\"; bunx tsc --noEmit -p \"$pkg\" || exit 1; done'",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
     "format": "bunx biome format --write .",

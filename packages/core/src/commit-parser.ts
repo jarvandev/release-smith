@@ -8,16 +8,15 @@ export function parseConventionalCommit(
   body: string,
 ): ConventionalCommit | null {
   const match = message.match(CONVENTIONAL_REGEX);
-  if (!match) return null;
-  const [, type, scope, bang, description] = match;
+  if (!match?.[1] || !match[4]) return null;
   const breakingInFooter = /^BREAKING[ -]CHANGE\s*:/m.test(body);
   return {
     hash,
-    type,
-    scope: scope ?? null,
-    description: description.trim(),
+    type: match[1],
+    scope: match[2] ?? null,
+    description: match[4].trim(),
     body,
-    breaking: bang === "!" || breakingInFooter,
+    breaking: match[3] === "!" || breakingInFooter,
     rawMessage: message,
   };
 }
