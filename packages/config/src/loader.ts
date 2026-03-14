@@ -20,5 +20,6 @@ export async function loadConfig(cwd: string): Promise<RawConfig | null> {
     packages: raw.packages ?? {},
     branches: raw.branches,
     tagFormat: raw.tagFormat,
+    groups: raw.groups,
   };
 }

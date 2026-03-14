@@ -19,6 +19,15 @@ export interface RawConfig {
    * Defaults: single package = `"v{version}"`, monorepo = `"{name}@{version}"`.
    */
   tagFormat?: string;
+  /** Version groups for monorepo version alignment. */
+  groups?: VersionGroups;
+}
+
+export interface VersionGroups {
+  /** Fixed groups: all packages always share the same version. */
+  fixed?: string[][];
+  /** Linked groups: bumped packages share the highest version. */
+  linked?: string[][];
 }
 
 export interface ResolvedPackage {

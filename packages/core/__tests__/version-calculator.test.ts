@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ResolvedPackage } from "@release-smith/config";
 import type { ConventionalCommit } from "../src/types";
 import {
+  applyVersionGroups,
   bumpPrerelease,
   bumpVersion,
   calculateVersionBumps,
@@ -239,6 +240,118 @@ describe("calculateVersionBumps with prerelease", () => {
     const cli = bumps.find((b) => b.packageName === "@myapp/cli")!;
     expect(cli.newVersion).toBe("1.0.1-beta.0");
     expect(cli.propagated).toBe(true);
+  });
+});
+
+describe("applyVersionGroups", () => {
+  describe("fixed groups", () => {
+    it("aligns versions across fixed group", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
+        { packagePath: "a/cli", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      expect(result[0].newVersion).toBe("1.1.0");
+      expect(result[1].newVersion).toBe("1.1.0");
+    });
+
+    it("adds missing packages in fixed group", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
+      ]);
+      // cli has no commits, but should be added due to fixed group
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      expect(result).toHaveLength(2);
+      const cli = result.find((b) => b.packageName === "@a/cli")!;
+      expect(cli.newVersion).toBe("1.1.0");
+    });
+
+    it("does nothing when no bumps in fixed group", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core" }),
+        makePackage({ name: "@a/cli", path: "a/cli" }),
+      ];
+      const result = applyVersionGroups([], packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it("uses highest current version in fixed group", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.2.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      // Should use 1.2.0 (highest current) + patch = 1.2.1
+      const core = result.find((b) => b.packageName === "@a/core")!;
+      expect(core.newVersion).toBe("1.2.1");
+    });
+  });
+
+  describe("linked groups", () => {
+    it("aligns versions across linked group", () => {
+      const packages = [
+        makePackage({ name: "@a/ui", path: "a/ui", version: "1.0.0" }),
+        makePackage({ name: "@a/theme", path: "a/theme", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/ui", commit: makeCommit({ type: "feat" }) },
+        { packagePath: "a/theme", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        linked: [["@a/ui", "@a/theme"]],
+      });
+      expect(result[0].newVersion).toBe("1.1.0");
+      expect(result[1].newVersion).toBe("1.1.0");
+    });
+
+    it("does not add missing packages in linked group", () => {
+      const packages = [
+        makePackage({ name: "@a/ui", path: "a/ui", version: "1.0.0" }),
+        makePackage({ name: "@a/theme", path: "a/theme", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/ui", commit: makeCommit({ type: "feat" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        linked: [["@a/ui", "@a/theme"]],
+      });
+      // theme has no changes, should not be added
+      expect(result).toHaveLength(1);
+      expect(result[0].packageName).toBe("@a/ui");
+    });
+
+    it("does nothing for single bump in linked group", () => {
+      const packages = [
+        makePackage({ name: "@a/ui", path: "a/ui", version: "1.0.0" }),
+        makePackage({ name: "@a/theme", path: "a/theme", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/ui", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        linked: [["@a/ui", "@a/theme"]],
+      });
+      expect(result[0].newVersion).toBe("1.0.1");
+    });
   });
 });
 

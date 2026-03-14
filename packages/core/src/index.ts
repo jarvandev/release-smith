@@ -22,6 +22,7 @@ export type {
 } from "./types";
 export type { PrereleaseOptions } from "./version-calculator";
 export {
+  applyVersionGroups,
   bumpPrerelease,
   bumpVersion,
   calculateVersionBumps,

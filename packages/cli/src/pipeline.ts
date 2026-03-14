@@ -1,5 +1,6 @@
 import { discoverPackages, loadConfig, type ResolvedPackage } from "@release-smith/config";
 import {
+  applyVersionGroups,
   assignCommitsToPackages,
   type ConventionalCommit,
   calculateVersionBumps,
@@ -123,6 +124,11 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     prereleaseOpts = { preid, lastStableVersions };
   }
 
-  const bumps = calculateVersionBumps(packages, filteredPackageCommits, prereleaseOpts);
+  let bumps = calculateVersionBumps(packages, filteredPackageCommits, prereleaseOpts);
+
+  if (config?.groups) {
+    bumps = applyVersionGroups(bumps, packages, config.groups);
+  }
+
   return { packages, bumps, isMonorepo, tagFormat };
 }

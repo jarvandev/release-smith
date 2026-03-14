@@ -1,4 +1,4 @@
-import type { ResolvedPackage } from "@release-smith/config";
+import type { ResolvedPackage, VersionGroups } from "@release-smith/config";
 import semver from "semver";
 import type { BumpLevel, ConventionalCommit, PackageCommit, VersionBump } from "./types";
 
@@ -148,6 +148,99 @@ function getHighestBump(commits: ConventionalCommit[]): BumpLevel | null {
     if (!highest || BUMP_ORDER[level] > BUMP_ORDER[highest]) highest = level;
   }
   return highest;
+}
+
+/**
+ * Post-process version bumps to enforce fixed/linked group constraints.
+ *
+ * - Fixed: all packages in a group get the same (highest) version.
+ *   Packages with no changes are added to the results.
+ * - Linked: bumped packages in a group share the highest new version.
+ *   Packages with no changes are NOT added.
+ */
+export function applyVersionGroups(
+  bumps: VersionBump[],
+  packages: ResolvedPackage[],
+  groups: VersionGroups,
+): VersionBump[] {
+  const result = [...bumps];
+  const bumpByName = new Map(result.map((b) => [b.packageName, b]));
+
+  for (const group of groups.fixed ?? []) {
+    const groupSet = new Set(group);
+    const groupBumps = result.filter((b) => groupSet.has(b.packageName));
+    if (groupBumps.length === 0) continue;
+
+    // Find highest bump level
+    let highestLevel: BumpLevel = "patch";
+    for (const b of groupBumps) {
+      if (BUMP_ORDER[b.level] > BUMP_ORDER[highestLevel]) {
+        highestLevel = b.level;
+      }
+    }
+
+    // Find highest current version across ALL group packages
+    const groupPackages = packages.filter((p) => groupSet.has(p.name));
+    let highestCurrent = "0.0.0";
+    for (const pkg of groupPackages) {
+      if (semver.gt(semver.coerce(pkg.version)!, semver.coerce(highestCurrent)!)) {
+        highestCurrent = pkg.version;
+      }
+    }
+
+    // Calculate unified version from highest current
+    const unifiedVersion = bumpVersion(highestCurrent.replace(/-.*$/, ""), highestLevel);
+
+    // Pick the highest: unified or any existing bump
+    let finalVersion = unifiedVersion;
+    for (const b of groupBumps) {
+      if (semver.gt(b.newVersion, finalVersion)) {
+        finalVersion = b.newVersion;
+      }
+    }
+
+    // Apply to all group bumps
+    for (const b of groupBumps) {
+      b.newVersion = finalVersion;
+    }
+
+    // Add missing packages
+    for (const pkg of groupPackages) {
+      if (bumpByName.has(pkg.name)) continue;
+      if (!pkg.publish) continue;
+      if (pkg.version === finalVersion) continue;
+      const newBump: VersionBump = {
+        packagePath: pkg.path,
+        packageName: pkg.name,
+        currentVersion: pkg.version,
+        newVersion: finalVersion,
+        level: highestLevel,
+        commits: [],
+        propagated: false,
+      };
+      result.push(newBump);
+      bumpByName.set(pkg.name, newBump);
+    }
+  }
+
+  for (const group of groups.linked ?? []) {
+    const groupSet = new Set(group);
+    const groupBumps = result.filter((b) => groupSet.has(b.packageName));
+    if (groupBumps.length <= 1) continue;
+
+    let highestVersion = "0.0.0";
+    for (const b of groupBumps) {
+      if (semver.gt(b.newVersion, highestVersion)) {
+        highestVersion = b.newVersion;
+      }
+    }
+
+    for (const b of groupBumps) {
+      b.newVersion = highestVersion;
+    }
+  }
+
+  return result;
 }
 
 export function detectCircularDeps(packages: ResolvedPackage[]): string[] | null {

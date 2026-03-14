@@ -4,5 +4,6 @@ export type {
   PackageConfig,
   RawConfig,
   ResolvedPackage,
+  VersionGroups,
 } from "./types";
 export { discoverPackages } from "./workspace";
