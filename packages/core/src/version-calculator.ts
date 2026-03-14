@@ -163,7 +163,7 @@ export function applyVersionGroups(
   packages: ResolvedPackage[],
   groups: VersionGroups,
 ): VersionBump[] {
-  const result = [...bumps];
+  const result = bumps.map((b) => ({ ...b }));
   const bumpByName = new Map(result.map((b) => [b.packageName, b]));
 
   for (const group of groups.fixed ?? []) {
@@ -179,23 +179,24 @@ export function applyVersionGroups(
       }
     }
 
-    // Find highest current version across ALL group packages
     const groupPackages = packages.filter((p) => groupSet.has(p.name));
-    let highestCurrent = "0.0.0";
-    for (const pkg of groupPackages) {
-      if (semver.gt(semver.coerce(pkg.version)!, semver.coerce(highestCurrent)!)) {
-        highestCurrent = pkg.version;
-      }
-    }
 
-    // Calculate unified version from highest current
-    const unifiedVersion = bumpVersion(highestCurrent.replace(/-.*$/, ""), highestLevel);
-
-    // Pick the highest: unified or any existing bump
-    let finalVersion = unifiedVersion;
+    // Start from the highest version among the already-calculated bumps
+    let finalVersion = "0.0.0";
     for (const b of groupBumps) {
       if (semver.gt(b.newVersion, finalVersion)) {
         finalVersion = b.newVersion;
+      }
+    }
+
+    // Check non-bumped packages: if any has a higher base version,
+    // bump from that version to ensure consistency
+    for (const pkg of groupPackages) {
+      if (bumpByName.has(pkg.name)) continue;
+      const stable = pkg.version.replace(/-.*$/, "");
+      const wouldBe = bumpVersion(stable, highestLevel);
+      if (semver.gt(wouldBe, finalVersion)) {
+        finalVersion = wouldBe;
       }
     }
 

@@ -14,9 +14,9 @@ Execute a git command and return stdout.
 
 Get commits between two refs. If `fromRef` is null, returns all commits up to `toRef`.
 
-### `getLatestVersionTag(cwd: string, packageName: string | null): Promise<string | null>`
+### `getLatestVersionTag(cwd: string, tagPrefix: string): Promise<string | null>`
 
-Find the latest SemVer tag. For monorepo, matches `<packageName>@<version>` format.
+Find the latest stable SemVer tag matching the given prefix (e.g., `"v"` or `"@myapp/core@"`).
 
 ### `getChangedFiles(cwd: string, commitHash: string): Promise<string[]>`
 

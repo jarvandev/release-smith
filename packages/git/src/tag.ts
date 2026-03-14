@@ -10,6 +10,12 @@ export async function getTags(cwd: string): Promise<string[]> {
   }
 }
 
+/**
+ * Find the latest stable version tag matching the given prefix.
+ * Only matches tags with a stable semver suffix (X.Y.Z, no pre-release).
+ * Pre-release tags (e.g., v1.0.0-beta.0) are intentionally excluded so
+ * the pipeline always calculates from the last stable release.
+ */
 export async function getLatestVersionTag(cwd: string, tagPrefix: string): Promise<string | null> {
   const tags = await getTags(cwd);
   const versionRegex = /^(\d+)\.(\d+)\.(\d+)$/;

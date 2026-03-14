@@ -13,6 +13,12 @@ describe("resolveTagFormat", () => {
   it("uses custom format when provided", () => {
     expect(resolveTagFormat("release-{version}", false)).toBe("release-{version}");
   });
+
+  it("throws when tagFormat is missing {version} placeholder", () => {
+    expect(() => resolveTagFormat("release", false)).toThrow(
+      'tagFormat must include "{version}" placeholder',
+    );
+  });
 });
 
 describe("formatTagName", () => {

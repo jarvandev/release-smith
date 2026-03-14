@@ -353,6 +353,78 @@ describe("applyVersionGroups", () => {
       expect(result[0].newVersion).toBe("1.0.1");
     });
   });
+
+  describe("with prerelease versions", () => {
+    it("aligns prerelease versions in fixed group", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(
+        packages,
+        [
+          { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
+          { packagePath: "a/cli", commit: makeCommit({ type: "fix" }) },
+        ],
+        {
+          preid: "beta",
+          lastStableVersions: new Map([
+            ["a/core", "1.0.0"],
+            ["a/cli", "1.0.0"],
+          ]),
+        },
+      );
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      // Both should have the same (highest) prerelease version
+      expect(result[0].newVersion).toBe(result[1].newVersion);
+      expect(result[0].newVersion).toBe("1.1.0-beta.0");
+    });
+
+    it("aligns prerelease versions in linked group", () => {
+      const packages = [
+        makePackage({ name: "@a/ui", path: "a/ui", version: "1.0.0" }),
+        makePackage({ name: "@a/theme", path: "a/theme", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(
+        packages,
+        [
+          { packagePath: "a/ui", commit: makeCommit({ type: "feat" }) },
+          { packagePath: "a/theme", commit: makeCommit({ type: "fix" }) },
+        ],
+        {
+          preid: "beta",
+          lastStableVersions: new Map([
+            ["a/ui", "1.0.0"],
+            ["a/theme", "1.0.0"],
+          ]),
+        },
+      );
+      const result = applyVersionGroups(bumps, packages, {
+        linked: [["@a/ui", "@a/theme"]],
+      });
+      expect(result[0].newVersion).toBe("1.1.0-beta.0");
+      expect(result[1].newVersion).toBe("1.1.0-beta.0");
+    });
+  });
+
+  describe("does not mutate input", () => {
+    it("preserves original bumps", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
+        { packagePath: "a/cli", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const originalVersions = bumps.map((b) => b.newVersion);
+      applyVersionGroups(bumps, packages, { fixed: [["@a/core", "@a/cli"]] });
+      // Original bumps should not be mutated
+      expect(bumps.map((b) => b.newVersion)).toEqual(originalVersions);
+    });
+  });
 });
 
 describe("detectCircularDeps", () => {
