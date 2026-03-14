@@ -1,0 +1,88 @@
+import { describe, it, expect } from "bun:test";
+import { parseConventionalCommit, assignCommitsToPackages } from "../src/commit-parser";
+
+describe("parseConventionalCommit", () => {
+  it("parses simple commit", () => {
+    const result = parseConventionalCommit("abc123", "feat: add login", "");
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("feat");
+    expect(result!.scope).toBeNull();
+    expect(result!.description).toBe("add login");
+    expect(result!.breaking).toBe(false);
+  });
+
+  it("parses commit with scope", () => {
+    const result = parseConventionalCommit("abc123", "fix(auth): token refresh", "");
+    expect(result!.type).toBe("fix");
+    expect(result!.scope).toBe("auth");
+    expect(result!.description).toBe("token refresh");
+  });
+
+  it("detects breaking change via !", () => {
+    const result = parseConventionalCommit("abc123", "feat!: remove old API", "");
+    expect(result!.breaking).toBe(true);
+    expect(result!.type).toBe("feat");
+  });
+
+  it("detects breaking change via scope and !", () => {
+    const result = parseConventionalCommit("abc123", "refactor(core)!: rewrite engine", "");
+    expect(result!.breaking).toBe(true);
+    expect(result!.scope).toBe("core");
+  });
+
+  it("detects BREAKING CHANGE in footer", () => {
+    const result = parseConventionalCommit("abc123", "feat: new API", "Some details\n\nBREAKING CHANGE: old API removed");
+    expect(result!.breaking).toBe(true);
+  });
+
+  it("detects BREAKING-CHANGE (hyphen) in footer", () => {
+    const result = parseConventionalCommit("abc123", "feat: new API", "BREAKING-CHANGE: old API removed");
+    expect(result!.breaking).toBe(true);
+  });
+
+  it("returns null for non-conventional commit", () => {
+    expect(parseConventionalCommit("abc123", "just a random commit", "")).toBeNull();
+  });
+
+  it("returns null for merge commits", () => {
+    expect(parseConventionalCommit("abc123", "Merge branch 'main'", "")).toBeNull();
+  });
+
+  it("handles colon in description", () => {
+    const result = parseConventionalCommit("abc123", "fix: handle edge case: empty input", "");
+    expect(result!.description).toBe("handle edge case: empty input");
+  });
+});
+
+describe("assignCommitsToPackages", () => {
+  it("assigns commit to package by file path", () => {
+    const commit = { hash: "abc123", type: "feat", scope: null, description: "add feature", body: "", breaking: false, rawMessage: "feat: add feature" };
+    const filesMap = new Map([["abc123", ["packages/core/src/index.ts"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core", "packages/cli"]);
+    expect(result).toHaveLength(1);
+    expect(result[0].packagePath).toBe("packages/core");
+  });
+
+  it("assigns commit to multiple packages", () => {
+    const commit = { hash: "abc123", type: "fix", scope: null, description: "shared fix", body: "", breaking: false, rawMessage: "fix: shared fix" };
+    const filesMap = new Map([["abc123", ["packages/core/src/a.ts", "packages/cli/src/b.ts"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core", "packages/cli"]);
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.packagePath).sort()).toEqual(["packages/cli", "packages/core"]);
+  });
+
+  it("assigns root-level changes to single-package '.' path", () => {
+    const commit = { hash: "abc123", type: "feat", scope: null, description: "root change", body: "", breaking: false, rawMessage: "feat: root change" };
+    const filesMap = new Map([["abc123", ["src/index.ts"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["."]);
+    expect(result).toHaveLength(1);
+    expect(result[0].packagePath).toBe(".");
+  });
+
+  it("ignores files not matching any package", () => {
+    const commit = { hash: "abc123", type: "fix", scope: null, description: "root fix", body: "", breaking: false, rawMessage: "fix: root fix" };
+    const filesMap = new Map([["abc123", ["README.md"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
+    expect(result).toHaveLength(0);
+  });
+});
