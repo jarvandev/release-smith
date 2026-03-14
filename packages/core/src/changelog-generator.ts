@@ -11,8 +11,12 @@ export function generateChangelog(bump: VersionBump, date: string, repoUrl: stri
   const lines: string[] = [];
   lines.push(`## [${bump.newVersion}] - ${date}`);
   lines.push("");
-  if (bump.propagated && bump.commits.length === 0) {
-    lines.push("- Bump version due to dependency update");
+  if (bump.commits.length === 0) {
+    lines.push(
+      bump.propagated
+        ? "- Bump version due to dependency update"
+        : "- Bump version due to version group alignment",
+    );
     lines.push("");
     return lines.join("\n");
   }

@@ -104,14 +104,26 @@ export function calculateVersionBumps(
     const isPropagated = propagatedPaths.has(pkg.path);
     if (!direct && !isPropagated) continue;
 
+    // Roll up commits from unpublished workspace deps into this package
+    const rolledUp = collectUnpublishedDepCommits(pkg.name, packageByName, directBumps, new Set());
+
     let level: BumpLevel;
     let isResultPropagated: boolean;
     let commits: ConventionalCommit[];
     if (direct) {
-      level = direct.level;
+      // Merge own commits with rolled-up commits (deduplicated)
+      const seen = new Set(direct.commits.map((c) => c.hash));
+      const merged = [...direct.commits, ...rolledUp.filter((c) => !seen.has(c.hash))];
+      level = getHighestBump(merged) ?? direct.level;
       isResultPropagated = false;
-      commits = direct.commits;
+      commits = merged;
+    } else if (rolledUp.length > 0) {
+      // Only rolled-up commits from unpublished deps
+      level = getHighestBump(rolledUp) ?? "patch";
+      isResultPropagated = false;
+      commits = rolledUp;
     } else {
+      // Propagated from a published dep with no commits to roll up
       level = "patch";
       isResultPropagated = true;
       commits = [];
@@ -137,6 +149,36 @@ export function calculateVersionBumps(
     });
   }
   return results;
+}
+
+/**
+ * Recursively collect commits from unpublished workspace dependencies.
+ * These commits get "rolled up" into the published package's changelog.
+ */
+function collectUnpublishedDepCommits(
+  pkgName: string,
+  packageByName: Map<string, ResolvedPackage>,
+  directBumps: Map<string, { level: BumpLevel; commits: ConventionalCommit[] }>,
+  visited: Set<string>,
+): ConventionalCommit[] {
+  if (visited.has(pkgName)) return [];
+  visited.add(pkgName);
+
+  const pkg = packageByName.get(pkgName);
+  if (!pkg) return [];
+
+  const collected: ConventionalCommit[] = [];
+  for (const depName of pkg.workspaceDeps) {
+    const dep = packageByName.get(depName);
+    if (!dep || dep.publish) continue;
+
+    const depBump = directBumps.get(dep.path);
+    if (depBump) {
+      collected.push(...depBump.commits);
+    }
+    collected.push(...collectUnpublishedDepCommits(depName, packageByName, directBumps, visited));
+  }
+  return collected;
 }
 
 function getHighestBump(commits: ConventionalCommit[]): BumpLevel | null {

@@ -111,7 +111,8 @@ describe("calculateVersionBumps", () => {
     expect(bumps).toHaveLength(0);
   });
 
-  it("propagates through deps", () => {
+  it("rolls up commits from unpublished deps", () => {
+    const featCommit = makeCommit({ type: "feat", description: "new feature" });
     const packages = [
       makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
       makePackage({
@@ -122,12 +123,78 @@ describe("calculateVersionBumps", () => {
       }),
     ];
     const bumps = calculateVersionBumps(packages, [
-      { packagePath: "packages/core", commit: makeCommit({ type: "feat" }) },
+      { packagePath: "packages/core", commit: featCommit },
     ]);
     expect(bumps).toHaveLength(1);
     expect(bumps[0].packageName).toBe("@myapp/cli");
-    expect(bumps[0].newVersion).toBe("1.0.1");
-    expect(bumps[0].propagated).toBe(true);
+    // feat from unpublished dep -> minor bump (not just patch)
+    expect(bumps[0].newVersion).toBe("1.1.0");
+    expect(bumps[0].propagated).toBe(false);
+    expect(bumps[0].commits).toContain(featCommit);
+  });
+
+  it("propagates with patch from published deps", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: true }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(packages, [
+      { packagePath: "packages/core", commit: makeCommit({ type: "feat" }) },
+    ]);
+    const cli = bumps.find((b) => b.packageName === "@myapp/cli")!;
+    // Published dep -> no rollup, just patch propagation
+    expect(cli.newVersion).toBe("1.0.1");
+    expect(cli.propagated).toBe(true);
+    expect(cli.commits).toHaveLength(0);
+  });
+
+  it("rolls up transitively from nested unpublished deps", () => {
+    const packages = [
+      makePackage({ name: "@myapp/utils", path: "packages/utils", publish: false }),
+      makePackage({
+        name: "@myapp/core",
+        path: "packages/core",
+        publish: false,
+        workspaceDeps: ["@myapp/utils"],
+      }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(packages, [
+      { packagePath: "packages/utils", commit: makeCommit({ type: "feat" }) },
+    ]);
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].packageName).toBe("@myapp/cli");
+    expect(bumps[0].newVersion).toBe("1.1.0");
+    expect(bumps[0].commits).toHaveLength(1);
+  });
+
+  it("merges own commits with rolled-up commits", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(packages, [
+      { packagePath: "packages/core", commit: makeCommit({ hash: "aaa", type: "feat" }) },
+      { packagePath: "packages/cli", commit: makeCommit({ hash: "bbb", type: "fix" }) },
+    ]);
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].newVersion).toBe("1.1.0"); // feat wins over fix
+    expect(bumps[0].commits).toHaveLength(2);
   });
 
   it("direct bump over propagated", () => {

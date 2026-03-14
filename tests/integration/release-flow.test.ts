@@ -115,6 +115,7 @@ describe("Monorepo release flow", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("@myapp/cli");
     expect(stdout).toContain("1.0.0");
-    expect(stdout).toContain("1.0.1");
+    // feat from unpublished core is rolled up into cli -> minor bump
+    expect(stdout).toContain("1.1.0");
   });
 });
