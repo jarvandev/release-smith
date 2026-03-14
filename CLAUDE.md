@@ -11,6 +11,8 @@ Lightweight release management tool for Node.js/Bun, built with Bun.
 
 ```bash
 bun run dev <command>      # Run CLI locally (e.g. bun run dev status)
+bun run dev release --pr   # Create/update a Release PR (recommended)
+bun run dev release-tags --pr-number=N  # Tag + publish from merged PR
 bun run test               # Run all tests
 bun run test:watch         # Run tests in watch mode
 bun run typecheck          # Typecheck all packages

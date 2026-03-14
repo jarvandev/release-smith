@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { updatePackageVersion, updateWorkspaceDeps } from "../src/releaser";
+import { buildCommitMessage, updatePackageVersion, updateWorkspaceDeps } from "../src/releaser";
 
 describe("updatePackageVersion", () => {
   let tempDir: string;
@@ -79,5 +79,44 @@ describe("updateWorkspaceDeps", () => {
       await readFile(join(tempDir, "packages/plugin/package.json"), "utf-8"),
     );
     expect(content.peerDependencies["@myapp/core"]).toBe("^2.0.0");
+  });
+});
+
+describe("buildCommitMessage", () => {
+  it("builds message for single package", () => {
+    const msg = buildCommitMessage([
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0",
+        changelog: "",
+        tagName: "v1.1.0",
+      },
+    ]);
+    expect(msg).toBe("chore(release): @myapp/core@1.1.0");
+  });
+
+  it("builds message for multiple packages", () => {
+    const msg = buildCommitMessage([
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0",
+        changelog: "",
+        tagName: "",
+      },
+      {
+        packageName: "@myapp/cli",
+        packagePath: "packages/cli",
+        version: "2.0.0",
+        changelog: "",
+        tagName: "",
+      },
+    ]);
+    expect(msg).toBe("chore(release): @myapp/core@1.1.0, @myapp/cli@2.0.0");
+  });
+
+  it("throws on empty results", () => {
+    expect(() => buildCommitMessage([])).toThrow("Cannot build commit message from empty");
   });
 });

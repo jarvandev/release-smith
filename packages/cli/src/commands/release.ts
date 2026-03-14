@@ -2,6 +2,7 @@ import { executeRelease, publishGitHubReleases } from "@release-smith/core";
 import { execGit } from "@release-smith/git";
 import { defineCommand } from "citty";
 import { runPipeline } from "../pipeline";
+import { runReleasePR } from "./release-pr";
 
 export default defineCommand({
   meta: {
@@ -28,6 +29,16 @@ export default defineCommand({
       description: "Create GitHub Releases after push (implies --push)",
       default: false,
     },
+    pr: {
+      type: "boolean",
+      description: "Create a Release PR instead of committing directly",
+      default: false,
+    },
+    branch: {
+      type: "string",
+      description: "Release branch name for --pr mode",
+      default: "release/next",
+    },
     cwd: {
       type: "string",
       description: "Specify working directory",
@@ -36,13 +47,18 @@ export default defineCommand({
   },
   async run({ args }) {
     const dryRun = args["dry-run"];
+    const prMode = args.pr;
     const shouldPush = args.push || args["github-release"];
     const shouldGitHubRelease = args["github-release"];
-    const targetPkgs = args.target ? args.target.split(",").map((s) => s.trim()) : [];
+
+    if (prMode && (shouldPush || shouldGitHubRelease)) {
+      throw new Error("--pr is mutually exclusive with --push and --github-release.");
+    }
 
     const { packages, bumps: allBumps, isMonorepo } = await runPipeline(args.cwd);
 
     let bumps = allBumps;
+    const targetPkgs = args.target ? args.target.split(",").map((s) => s.trim()) : [];
     if (targetPkgs.length > 0) {
       const targeted = new Set(targetPkgs);
       const filtered = bumps.filter((b) => targeted.has(b.packageName));
@@ -53,6 +69,18 @@ export default defineCommand({
         );
       }
       bumps = filtered;
+    }
+
+    if (prMode) {
+      await runReleasePR({
+        cwd: args.cwd,
+        bumps,
+        packages,
+        isMonorepo,
+        branch: args.branch,
+        dryRun,
+      });
+      return;
     }
 
     if (bumps.length === 0) {

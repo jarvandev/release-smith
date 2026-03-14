@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResolvedPackage } from "@release-smith/config";
-import { execGit } from "@release-smith/git";
+import { createTag, execGit } from "@release-smith/git";
 import { createGitHubRelease, parseGitHubUrl } from "@release-smith/github";
 import { generateChangelog, insertChangelog } from "./changelog-generator";
 import type { ReleaseResult, VersionBump } from "./types";
@@ -42,17 +42,16 @@ export async function updateWorkspaceDeps(
 }
 
 /**
- * Execute release: bump versions, write changelogs, commit, tag.
- * Does NOT create GitHub Releases (use publishGitHubReleases after pushing).
+ * Apply release file changes (version bumps, changelogs, workspace deps)
+ * without any git operations. Returns ReleaseResult[] describing what changed.
  */
-export async function executeRelease(options: {
+export async function applyReleaseChanges(options: {
   cwd: string;
   bumps: VersionBump[];
   packages: ResolvedPackage[];
-  dryRun: boolean;
   isMonorepo: boolean;
 }): Promise<ReleaseResult[]> {
-  const { cwd, bumps, packages, dryRun, isMonorepo } = options;
+  const { cwd, bumps, packages, isMonorepo } = options;
   if (bumps.length === 0) return [];
 
   const date = new Date().toISOString().slice(0, 10);
@@ -73,15 +72,13 @@ export async function executeRelease(options: {
     const changelog = generateChangelog(bump, date, repoUrl);
     const tagName = isMonorepo ? `${bump.packageName}@${bump.newVersion}` : `v${bump.newVersion}`;
 
-    if (!dryRun) {
-      const pkgDir = join(cwd, bump.packagePath);
-      await updatePackageVersion(pkgDir, bump.newVersion);
+    const pkgDir = join(cwd, bump.packagePath);
+    await updatePackageVersion(pkgDir, bump.newVersion);
 
-      const pkg = packages.find((p) => p.path === bump.packagePath)!;
-      const existingChangelog = await readFileSafe(pkg.changelogPath);
-      const newChangelog = insertChangelog(existingChangelog, changelog);
-      await writeFile(pkg.changelogPath, newChangelog);
-    }
+    const pkg = packages.find((p) => p.path === bump.packagePath)!;
+    const existingChangelog = await readFileSafe(pkg.changelogPath);
+    const newChangelog = insertChangelog(existingChangelog, changelog);
+    await writeFile(pkg.changelogPath, newChangelog);
 
     results.push({
       packageName: bump.packageName,
@@ -92,20 +89,83 @@ export async function executeRelease(options: {
     });
   }
 
-  if (!dryRun) {
-    for (const pkg of packages) {
-      await updateWorkspaceDeps(join(cwd, pkg.path), versionMap);
-    }
-
-    await execGit(["add", "-A"], cwd);
-    const first = results[0];
-    const commitMsg =
-      first && results.length === 1
-        ? `chore(release): ${first.packageName}@${first.version}`
-        : `chore(release): ${results.map((r) => `${r.packageName}@${r.version}`).join(", ")}`;
-    await execGit(["commit", "-m", commitMsg], cwd);
-    for (const result of results) await execGit(["tag", result.tagName], cwd);
+  for (const pkg of packages) {
+    await updateWorkspaceDeps(join(cwd, pkg.path), versionMap);
   }
+
+  return results;
+}
+
+/**
+ * Build commit message from release results.
+ * Requires at least one result.
+ */
+export function buildCommitMessage(results: ReleaseResult[]): string {
+  if (results.length === 0) {
+    throw new Error("Cannot build commit message from empty release results.");
+  }
+  const first = results[0];
+  if (results.length === 1 && first) {
+    return `chore(release): ${first.packageName}@${first.version}`;
+  }
+  return `chore(release): ${results.map((r) => `${r.packageName}@${r.version}`).join(", ")}`;
+}
+
+/**
+ * Create git tags for the given release results on the current HEAD.
+ * Optionally push tags to remote.
+ */
+export async function createReleaseTags(
+  cwd: string,
+  results: ReleaseResult[],
+  push: boolean,
+): Promise<void> {
+  for (const result of results) {
+    await createTag(cwd, result.tagName);
+  }
+  if (push) {
+    await execGit(["push", "--tags"], cwd);
+  }
+}
+
+/**
+ * Execute release: bump versions, write changelogs, commit, tag.
+ * Does NOT create GitHub Releases (use publishGitHubReleases after pushing).
+ */
+export async function executeRelease(options: {
+  cwd: string;
+  bumps: VersionBump[];
+  packages: ResolvedPackage[];
+  dryRun: boolean;
+  isMonorepo: boolean;
+}): Promise<ReleaseResult[]> {
+  const { cwd, bumps, packages, dryRun, isMonorepo } = options;
+  if (bumps.length === 0) return [];
+
+  if (dryRun) {
+    const date = new Date().toISOString().slice(0, 10);
+    let repoUrl: string | null = null;
+    try {
+      const remoteUrl = await execGit(["remote", "get-url", "origin"], cwd);
+      const parsed = parseGitHubUrl(remoteUrl);
+      if (parsed) repoUrl = `https://github.com/${parsed.owner}/${parsed.repo}`;
+    } catch {
+      /* no remote */
+    }
+    return bumps.map((bump) => ({
+      packageName: bump.packageName,
+      packagePath: bump.packagePath,
+      version: bump.newVersion,
+      changelog: generateChangelog(bump, date, repoUrl),
+      tagName: isMonorepo ? `${bump.packageName}@${bump.newVersion}` : `v${bump.newVersion}`,
+    }));
+  }
+
+  const results = await applyReleaseChanges({ cwd, bumps, packages, isMonorepo });
+
+  await execGit(["add", "-A"], cwd);
+  await execGit(["commit", "-m", buildCommitMessage(results)], cwd);
+  await createReleaseTags(cwd, results, false);
 
   return results;
 }

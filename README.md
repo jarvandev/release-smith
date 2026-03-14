@@ -8,6 +8,7 @@ Lightweight release management tool for Node.js/Bun projects. Inspired by [relea
 - Automatic SemVer version bumping
 - Keep a Changelog format changelog generation
 - GitHub Release creation
+- Release PR mode -- create a PR for review before publishing (verified commits)
 - Monorepo support with selective publishing and dependency-driven version propagation
 
 ## Install
@@ -78,6 +79,32 @@ Create `release-smith.json` in your project root:
 - When a dependency package changes, dependent packages get at least a patch bump
 - Only `dependencies` and `peerDependencies` trigger propagation (`devDependencies` are excluded)
 
+## Release Modes
+
+### Direct Mode (default)
+
+Commits directly to the current branch, creates tags locally.
+
+```bash
+release-smith release                          # local commit + tag
+release-smith release --push                   # + push to remote
+release-smith release --push --github-release  # + create GitHub Releases
+```
+
+### Release PR Mode (recommended for CI)
+
+Creates a Pull Request for review. After merging, a separate CI step creates tags and publishes. Merge commits are automatically marked as **Verified** by GitHub.
+
+```bash
+# Step 1: Create/update Release PR (runs on push to main)
+release-smith release --pr
+
+# Step 2: After PR is merged, create tags + GitHub Releases
+release-smith release-tags --pr-number=42
+```
+
+The Release PR includes a summary table, changelogs, and machine-readable metadata for the tagging step.
+
 ## CLI Commands
 
 ### `release-smith release`
@@ -86,9 +113,26 @@ Execute the full release pipeline.
 
 ```
 Options:
-  --dry-run    Analyze only, no write operations
-  --target     Release specific packages (comma-separated)
-  --cwd        Working directory (default: current)
+  --dry-run          Analyze only, no write operations
+  --target           Release specific packages (comma-separated)
+  --push             Push commits and tags to remote after release
+  --github-release   Create GitHub Releases after push (implies --push)
+  --pr               Create a Release PR instead of committing directly
+  --branch           Release branch name for --pr mode (default: release/next)
+  --cwd              Working directory (default: current)
+```
+
+`--pr` is mutually exclusive with `--push` and `--github-release`.
+
+### `release-smith release-tags`
+
+Create tags and GitHub Releases from a merged Release PR.
+
+```
+Options:
+  --pr-number        The merged Release PR number (required)
+  --github-release   Create GitHub Releases after tagging (default: true)
+  --cwd              Working directory (default: current)
 ```
 
 ### `release-smith status`
@@ -103,9 +147,19 @@ Generate and preview changelog without releasing.
 
 Create `release-smith.json` configuration with auto-detected workspace packages.
 
-## GitHub Release
+## GitHub Integration
 
-Set `GITHUB_TOKEN` environment variable with `contents: write` permission. If not set, git tags are still created but GitHub Release creation is skipped.
+Set `GITHUB_TOKEN` environment variable with `contents: write` and `pull-requests: write` permissions.
+
+- **Direct mode**: If `GITHUB_TOKEN` is not set, git tags are still created but GitHub Release creation is skipped.
+- **PR mode**: `GITHUB_TOKEN` is required.
+
+### CI Workflows
+
+Two GitHub Actions workflows are provided:
+
+- **`.github/workflows/release-pr.yml`** -- On push to main, runs `release-smith release --pr` to create/update the Release PR.
+- **`.github/workflows/release-publish.yml`** -- On Release PR merge, runs `release-smith release-tags`, builds, and publishes to npm.
 
 ## Packages
 

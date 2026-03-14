@@ -3,6 +3,9 @@
 export { generateChangelog, insertChangelog } from "./changelog-generator";
 export { assignCommitsToPackages, parseConventionalCommit } from "./commit-parser";
 export {
+  applyReleaseChanges,
+  buildCommitMessage,
+  createReleaseTags,
   executeRelease,
   publishGitHubReleases,
   updatePackageVersion,

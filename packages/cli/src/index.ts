@@ -9,6 +9,7 @@ const main = defineCommand({
   },
   subCommands: {
     release: () => import("./commands/release").then((m) => m.default),
+    "release-tags": () => import("./commands/release-tags").then((m) => m.default),
     status: () => import("./commands/status").then((m) => m.default),
     changelog: () => import("./commands/changelog").then((m) => m.default),
     init: () => import("./commands/init").then((m) => m.default),
