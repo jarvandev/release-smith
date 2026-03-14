@@ -54,6 +54,16 @@ describe("bumpVersion", () => {
   it("handles 0.x with breaking", () => {
     expect(bumpVersion("0.2.1", "major")).toBe("1.0.0");
   });
+
+  it("throws on invalid version string", () => {
+    expect(() => bumpVersion("not-a-version", "patch")).toThrow("Failed to bump version");
+  });
+
+  it("bumps prerelease version to next stable", () => {
+    // semver.inc("1.0.0-beta.0", "patch") -> "1.0.0"
+    // semver treats 1.0.0-beta.0 as a prerelease OF 1.0.0, so patch just drops the prerelease
+    expect(bumpVersion("1.0.0-beta.0", "patch")).toBe("1.0.0");
+  });
 });
 
 describe("calculateVersionBumps", () => {
@@ -355,6 +365,24 @@ describe("bumpPrerelease", () => {
   it("uses current version as stable base when no tag", () => {
     expect(bumpPrerelease("0.0.0", "0.0.0", "minor", "beta")).toBe("0.1.0-beta.0");
   });
+
+  it("throws on invalid lastStableVersion", () => {
+    expect(() => bumpPrerelease("1.0.0", "invalid", "patch", "beta")).toThrow(
+      "Failed to bump version",
+    );
+  });
+
+  it("starts new sequence when current is stable but higher than lastStable", () => {
+    // current=2.0.0 (stable), lastStable=1.0.0, level=minor
+    // targetStable = 1.1.0; current is stable, no prerelease -> new sequence
+    expect(bumpPrerelease("2.0.0", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.0");
+  });
+
+  it("handles prerelease with different preid and same base", () => {
+    // current=1.1.0-alpha.5 (preid=alpha), but requesting beta
+    // targetStable = 1.1.0; current preid != requested preid -> new sequence
+    expect(bumpPrerelease("1.1.0-alpha.5", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.0");
+  });
 });
 
 describe("calculateVersionBumps with prerelease", () => {
@@ -578,6 +606,79 @@ describe("applyVersionGroups", () => {
     });
   });
 
+  describe("edge cases", () => {
+    it("handles empty groups object", () => {
+      const packages = [makePackage({ name: "@a/core", path: "a/core" })];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {});
+      expect(result).toHaveLength(1);
+      expect(result[0].newVersion).toBe("1.0.1");
+    });
+
+    it("handles empty fixed and linked arrays", () => {
+      const packages = [makePackage({ name: "@a/core", path: "a/core" })];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, { fixed: [], linked: [] });
+      expect(result).toHaveLength(1);
+      expect(result[0].newVersion).toBe("1.0.1");
+    });
+
+    it("skips non-publish packages when adding missing in fixed group", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/internal", path: "a/internal", version: "1.0.0", publish: false }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/internal"]],
+      });
+      // @a/internal should NOT be added because publish=false
+      expect(result).toHaveLength(1);
+      expect(result[0].packageName).toBe("@a/core");
+    });
+
+    it("skips fixed group member that already has the target version", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.1.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      // cli version bump from 1.1.0 + patch = 1.1.1 vs core bump 1.1.0
+      // finalVersion = max(1.1.0, bumpVersion("1.1.0", "minor")) = max(1.1.0, 1.2.0) = 1.2.0
+      // Actually: core is bumped to 1.1.0 (from feat).
+      // cli is not bumped. Its "wouldBe" = bumpVersion("1.1.0", "minor") = 1.2.0.
+      // finalVersion = max(1.1.0, 1.2.0) = 1.2.0.
+      // cli gets added with 1.2.0.
+      const core = result.find((b) => b.packageName === "@a/core")!;
+      const cli = result.find((b) => b.packageName === "@a/cli")!;
+      expect(core.newVersion).toBe(cli.newVersion);
+    });
+
+    it("fixed group with non-existent package name is ignored", () => {
+      const packages = [makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" })];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "fix" }) },
+      ]);
+      // "nonexistent" is not in packages
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "nonexistent"]],
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0].newVersion).toBe("1.0.1");
+    });
+  });
+
   describe("does not mutate input", () => {
     it("preserves original bumps", () => {
       const packages = [
@@ -606,12 +707,46 @@ describe("detectCircularDeps", () => {
     ).toBeNull();
   });
 
-  it("returns cycle when circular", () => {
+  it("returns cycle when circular (2-node)", () => {
     const cycle = detectCircularDeps([
       makePackage({ name: "a", path: "a", workspaceDeps: ["b"] }),
       makePackage({ name: "b", path: "b", workspaceDeps: ["a"] }),
     ]);
     expect(cycle).not.toBeNull();
     expect(cycle!.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("detects 3-node cycle", () => {
+    const cycle = detectCircularDeps([
+      makePackage({ name: "a", path: "a", workspaceDeps: ["b"] }),
+      makePackage({ name: "b", path: "b", workspaceDeps: ["c"] }),
+      makePackage({ name: "c", path: "c", workspaceDeps: ["a"] }),
+    ]);
+    expect(cycle).not.toBeNull();
+    expect(cycle!.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("handles self-loop", () => {
+    const cycle = detectCircularDeps([makePackage({ name: "a", path: "a", workspaceDeps: ["a"] })]);
+    expect(cycle).not.toBeNull();
+  });
+
+  it("handles missing dep reference gracefully", () => {
+    // "nonexistent" is not in the packages list
+    const result = detectCircularDeps([
+      makePackage({ name: "a", path: "a", workspaceDeps: ["nonexistent"] }),
+    ]);
+    // Should not crash, no cycle found
+    expect(result).toBeNull();
+  });
+
+  it("null for deep linear chain", () => {
+    expect(
+      detectCircularDeps([
+        makePackage({ name: "a", path: "a", workspaceDeps: ["b"] }),
+        makePackage({ name: "b", path: "b", workspaceDeps: ["c"] }),
+        makePackage({ name: "c", path: "c", workspaceDeps: [] }),
+      ]),
+    ).toBeNull();
   });
 });

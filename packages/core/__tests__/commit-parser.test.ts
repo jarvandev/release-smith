@@ -60,6 +60,47 @@ describe("parseConventionalCommit", () => {
     const result = parseConventionalCommit("abc123", "fix: handle edge case: empty input", "");
     expect(result!.description).toBe("handle edge case: empty input");
   });
+
+  it("detects BREAKING CHANGE in body after other text", () => {
+    const result = parseConventionalCommit(
+      "abc123",
+      "feat: new API",
+      "Some context here.\n\nBREAKING CHANGE: old API removed",
+    );
+    expect(result!.breaking).toBe(true);
+  });
+
+  it("does not detect breaking change without colon", () => {
+    const result = parseConventionalCommit(
+      "abc123",
+      "feat: change behavior",
+      "BREAKING CHANGE without colon",
+    );
+    // The regex requires BREAKING CHANGE: (with colon)
+    expect(result!.breaking).toBe(false);
+  });
+
+  it("parses commit with special characters in scope", () => {
+    const result = parseConventionalCommit("abc123", "fix(api/v2): handle error", "");
+    expect(result!.scope).toBe("api/v2");
+    expect(result!.description).toBe("handle error");
+  });
+
+  it("parses chore and docs types", () => {
+    const chore = parseConventionalCommit("abc123", "chore: update deps", "");
+    expect(chore!.type).toBe("chore");
+    const docs = parseConventionalCommit("abc123", "docs: update readme", "");
+    expect(docs!.type).toBe("docs");
+  });
+
+  it("trims leading/trailing whitespace in description", () => {
+    const result = parseConventionalCommit("abc123", "feat:   add feature  ", "");
+    expect(result!.description).toBe("add feature");
+  });
+
+  it("returns null for empty string message", () => {
+    expect(parseConventionalCommit("abc123", "", "")).toBeNull();
+  });
 });
 
 describe("assignCommitsToPackages", () => {
@@ -122,6 +163,56 @@ describe("assignCommitsToPackages", () => {
       rawMessage: "fix: root fix",
     };
     const filesMap = new Map([["abc123", ["README.md"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
+    expect(result).toHaveLength(0);
+  });
+
+  it("deduplicates when multiple files hit the same package", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "multi file change",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: multi file change",
+    };
+    const filesMap = new Map([
+      ["abc123", ["packages/core/src/a.ts", "packages/core/src/b.ts", "packages/core/src/c.ts"]],
+    ]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
+    // Same commit, same package -> should appear only once
+    expect(result).toHaveLength(1);
+    expect(result[0].packagePath).toBe("packages/core");
+  });
+
+  it("handles commit with no files in filesMap", () => {
+    const commit = {
+      hash: "missing",
+      type: "fix",
+      scope: null,
+      description: "ghost commit",
+      body: "",
+      breaking: false,
+      rawMessage: "fix: ghost commit",
+    };
+    const filesMap = new Map<string, string[]>();
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
+    expect(result).toHaveLength(0);
+  });
+
+  it("does not match package path without trailing slash", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "change",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: change",
+    };
+    // "packages/core-extra/..." should NOT match "packages/core"
+    const filesMap = new Map([["abc123", ["packages/core-extra/src/index.ts"]]]);
     const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
     expect(result).toHaveLength(0);
   });

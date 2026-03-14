@@ -83,6 +83,34 @@ describe("getLatestVersionTag", () => {
     const tag = await getLatestVersionTag(tempDir, "release-");
     expect(tag).toBe("release-2.0.0");
   });
+
+  it("excludes pre-release tags", async () => {
+    await Bun.spawn(["git", "tag", "v1.0.0"], { cwd: tempDir }).exited;
+    await writeFile(join(tempDir, "file2.txt"), "more");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "more"], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "tag", "v2.0.0-beta.0"], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "tag", "v2.0.0-rc.1"], { cwd: tempDir }).exited;
+    // Should return v1.0.0 (the latest stable), not v2.0.0-beta.0 or v2.0.0-rc.1
+    const tag = await getLatestVersionTag(tempDir, "v");
+    expect(tag).toBe("v1.0.0");
+  });
+
+  it("ignores tags with invalid semver suffix", async () => {
+    await Bun.spawn(["git", "tag", "v1.0"], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "tag", "vabc"], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "tag", "v1.0.0"], { cwd: tempDir }).exited;
+    const tag = await getLatestVersionTag(tempDir, "v");
+    expect(tag).toBe("v1.0.0");
+  });
+
+  it("returns higher version regardless of creation order", async () => {
+    // Create v2.0.0 first, then v1.0.0 (reverse order)
+    await Bun.spawn(["git", "tag", "v2.0.0"], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "tag", "v1.0.0"], { cwd: tempDir }).exited;
+    const tag = await getLatestVersionTag(tempDir, "v");
+    expect(tag).toBe("v2.0.0");
+  });
 });
 
 describe("createTag", () => {

@@ -80,6 +80,40 @@ describe("updateWorkspaceDeps", () => {
     );
     expect(content.peerDependencies["@myapp/core"]).toBe("^2.0.0");
   });
+
+  it("does not modify deps not in versionMap", async () => {
+    await mkdir(join(tempDir, "packages/app"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/app/package.json"),
+      `${JSON.stringify(
+        {
+          name: "@myapp/app",
+          version: "1.0.0",
+          dependencies: { "@myapp/core": "workspace:*", lodash: "^4.17.0" },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    // Only update @myapp/core, lodash should remain unchanged
+    const versionMap = new Map([["@myapp/core", "2.0.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/app"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/app/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe("workspace:^2.0.0");
+    expect(content.dependencies.lodash).toBe("^4.17.0");
+  });
+
+  it("handles package.json with no dependencies", async () => {
+    await writeFile(
+      join(tempDir, "package.json"),
+      `${JSON.stringify({ name: "my-pkg", version: "1.0.0" }, null, 2)}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "2.0.0"]]);
+    // Should not throw
+    await updateWorkspaceDeps(tempDir, versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "package.json"), "utf-8"));
+    expect(content.dependencies).toBeUndefined();
+  });
 });
 
 describe("buildCommitMessage", () => {
@@ -118,5 +152,18 @@ describe("buildCommitMessage", () => {
 
   it("throws on empty results", () => {
     expect(() => buildCommitMessage([])).toThrow("Cannot build commit message from empty");
+  });
+
+  it("builds message with prerelease version", () => {
+    const msg = buildCommitMessage([
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0-beta.0",
+        changelog: "",
+        tagName: "v1.1.0-beta.0",
+      },
+    ]);
+    expect(msg).toBe("chore(release): @myapp/core@1.1.0-beta.0");
   });
 });

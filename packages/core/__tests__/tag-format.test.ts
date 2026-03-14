@@ -19,6 +19,21 @@ describe("resolveTagFormat", () => {
       'tagFormat must include "{version}" placeholder',
     );
   });
+
+  it("throws for empty string tagFormat", () => {
+    expect(() => resolveTagFormat("", false)).toThrow(
+      'tagFormat must include "{version}" placeholder',
+    );
+  });
+
+  it("accepts format with only {version}", () => {
+    expect(resolveTagFormat("{version}", false)).toBe("{version}");
+  });
+
+  it("accepts format with {name} but no monorepo flag", () => {
+    // This is allowed - format validation only checks {version}
+    expect(resolveTagFormat("{name}-{version}", false)).toBe("{name}-{version}");
+  });
 });
 
 describe("formatTagName", () => {
@@ -37,6 +52,20 @@ describe("formatTagName", () => {
   it("formats prerelease version", () => {
     expect(formatTagName("v{version}", "pkg", "1.0.0-beta.0")).toBe("v1.0.0-beta.0");
   });
+
+  it("handles format without {name} placeholder", () => {
+    expect(formatTagName("v{version}", "@myapp/core", "1.0.0")).toBe("v1.0.0");
+  });
+
+  it("handles format with multiple {version} occurrences", () => {
+    expect(formatTagName("{version}-{version}", "pkg", "1.0.0")).toBe("1.0.0-1.0.0");
+  });
+
+  it("handles scoped package name with special characters", () => {
+    expect(formatTagName("{name}@{version}", "@scope/pkg-name", "1.0.0")).toBe(
+      "@scope/pkg-name@1.0.0",
+    );
+  });
 });
 
 describe("resolveTagPrefix", () => {
@@ -54,5 +83,9 @@ describe("resolveTagPrefix", () => {
 
   it("resolves prefix with name in custom format", () => {
     expect(resolveTagPrefix("{name}-v{version}", "@myapp/core")).toBe("@myapp/core-v");
+  });
+
+  it("resolves empty prefix when format starts with {version}", () => {
+    expect(resolveTagPrefix("{version}", "my-pkg")).toBe("");
   });
 });

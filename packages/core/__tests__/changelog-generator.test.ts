@@ -126,6 +126,90 @@ describe("generateChangelog", () => {
     expect(result).toContain("1.0.1");
     expect(result).toContain("dependency update");
   });
+
+  it("generates note for version group alignment (non-propagated, no commits)", () => {
+    const bump: VersionBump = {
+      packagePath: "packages/utils",
+      packageName: "@myapp/utils",
+      currentVersion: "1.0.0",
+      newVersion: "1.1.0",
+      level: "minor",
+      commits: [],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null);
+    expect(result).toContain("1.1.0");
+    expect(result).toContain("version group alignment");
+    expect(result).not.toContain("dependency update");
+  });
+
+  it("generates Other Changes section for non-feat/fix/breaking commits", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "1.0.1",
+      level: "patch",
+      commits: [
+        makeCommit({ type: "chore", description: "update deps" }),
+        makeCommit({
+          type: "refactor",
+          description: "clean up code",
+          hash: "ddd444ddd444ddd444ddd444ddd444ddd444ddd4",
+        }),
+      ],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null);
+    expect(result).toContain("### Other Changes");
+    expect(result).toContain("update deps");
+    expect(result).toContain("clean up code");
+    expect(result).not.toContain("### Features");
+    expect(result).not.toContain("### Bug Fixes");
+  });
+
+  it("renders all four sections when present", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "2.0.0",
+      level: "major",
+      commits: [
+        makeCommit({
+          type: "feat",
+          description: "breaking API",
+          breaking: true,
+          hash: "aaa111aaa111aaa111aaa111aaa111aaa111aaa1",
+        }),
+        makeCommit({
+          type: "feat",
+          description: "new feature",
+          hash: "bbb222bbb222bbb222bbb222bbb222bbb222bbb2",
+        }),
+        makeCommit({
+          type: "fix",
+          description: "bug fix",
+          hash: "ccc333ccc333ccc333ccc333ccc333ccc333ccc3",
+        }),
+        makeCommit({
+          type: "chore",
+          description: "update deps",
+          hash: "ddd444ddd444ddd444ddd444ddd444ddd444ddd4",
+        }),
+      ],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null);
+    const breakingIdx = result.indexOf("### Breaking Changes");
+    const featIdx = result.indexOf("### Features");
+    const fixIdx = result.indexOf("### Bug Fixes");
+    const otherIdx = result.indexOf("### Other Changes");
+    expect(breakingIdx).toBeGreaterThanOrEqual(0);
+    expect(featIdx).toBeGreaterThan(breakingIdx);
+    expect(fixIdx).toBeGreaterThan(featIdx);
+    expect(otherIdx).toBeGreaterThan(fixIdx);
+  });
 });
 
 describe("insertChangelog", () => {
@@ -143,5 +227,23 @@ describe("insertChangelog", () => {
     const idx1 = result.indexOf("## [0.2.0]");
     const idx2 = result.indexOf("## [0.1.0]");
     expect(idx1).toBeLessThan(idx2);
+  });
+
+  it("prepends header when existing content has no # Changelog header", () => {
+    const existing = "## [0.1.0] - 2026-03-01\n\n- initial release\n";
+    const newEntry = "## [0.2.0] - 2026-03-14\n\n- fix bug";
+    const result = insertChangelog(existing, newEntry);
+    expect(result).toContain("# Changelog");
+    const headerIdx = result.indexOf("# Changelog");
+    const newIdx = result.indexOf("## [0.2.0]");
+    const oldIdx = result.indexOf("## [0.1.0]");
+    expect(headerIdx).toBeLessThan(newIdx);
+    expect(newIdx).toBeLessThan(oldIdx);
+  });
+
+  it("handles whitespace-only content as empty", () => {
+    const result = insertChangelog("   \n  ", "## [1.0.0] - 2026-03-14\n\n- release");
+    expect(result).toContain("# Changelog");
+    expect(result).toContain("## [1.0.0]");
   });
 });
