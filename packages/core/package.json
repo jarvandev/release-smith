@@ -8,10 +8,14 @@
   "dependencies": {
     "@release-smith/config": "workspace:*",
     "@release-smith/git": "workspace:*",
-    "@release-smith/github": "workspace:*"
+    "@release-smith/github": "workspace:*",
+    "semver": "^7.7.4"
   },
   "scripts": {
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.7.1"
   }
 }

@@ -1,19 +1,16 @@
 import type { ResolvedPackage } from "@release-smith/config";
+import semver from "semver";
 import type { BumpLevel, ConventionalCommit, PackageCommit, VersionBump } from "./types";
 
 const BUMP_ORDER: Record<BumpLevel, number> = { patch: 0, minor: 1, major: 2 };
 const TYPE_TO_BUMP: Record<string, BumpLevel> = { fix: "patch", feat: "minor" };
 
 export function bumpVersion(current: string, level: BumpLevel): string {
-  const [major, minor, patch] = current.split(".").map(Number);
-  switch (level) {
-    case "major":
-      return `${major + 1}.0.0`;
-    case "minor":
-      return `${major}.${minor + 1}.0`;
-    case "patch":
-      return `${major}.${minor}.${patch + 1}`;
+  const result = semver.inc(current, level);
+  if (!result) {
+    throw new Error(`Failed to bump version "${current}" by "${level}"`);
   }
+  return result;
 }
 
 export function calculateVersionBumps(
