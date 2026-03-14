@@ -1,10 +1,6 @@
 import { $ } from "bun";
 
-const targets = [
-  "bun-darwin-arm64",
-  "bun-darwin-x64",
-  "bun-linux-x64",
-];
+const targets = ["bun-darwin-arm64", "bun-darwin-x64", "bun-linux-x64"];
 
 await $`bun build packages/cli/src/index.ts --outdir dist --target bun`;
 

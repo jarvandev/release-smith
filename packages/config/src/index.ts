@@ -1,7 +1,7 @@
 export { loadConfig } from "./loader";
-export { discoverPackages } from "./workspace";
 export type {
-  RawConfig,
   PackageConfig,
+  RawConfig,
   ResolvedPackage,
 } from "./types";
+export { discoverPackages } from "./workspace";

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { parseConventionalCommit, assignCommitsToPackages } from "../src/commit-parser";
+import { describe, expect, it } from "bun:test";
+import { assignCommitsToPackages, parseConventionalCommit } from "../src/commit-parser";
 
 describe("parseConventionalCommit", () => {
   it("parses simple commit", () => {
@@ -31,12 +31,20 @@ describe("parseConventionalCommit", () => {
   });
 
   it("detects BREAKING CHANGE in footer", () => {
-    const result = parseConventionalCommit("abc123", "feat: new API", "Some details\n\nBREAKING CHANGE: old API removed");
+    const result = parseConventionalCommit(
+      "abc123",
+      "feat: new API",
+      "Some details\n\nBREAKING CHANGE: old API removed",
+    );
     expect(result!.breaking).toBe(true);
   });
 
   it("detects BREAKING-CHANGE (hyphen) in footer", () => {
-    const result = parseConventionalCommit("abc123", "feat: new API", "BREAKING-CHANGE: old API removed");
+    const result = parseConventionalCommit(
+      "abc123",
+      "feat: new API",
+      "BREAKING-CHANGE: old API removed",
+    );
     expect(result!.breaking).toBe(true);
   });
 
@@ -56,7 +64,15 @@ describe("parseConventionalCommit", () => {
 
 describe("assignCommitsToPackages", () => {
   it("assigns commit to package by file path", () => {
-    const commit = { hash: "abc123", type: "feat", scope: null, description: "add feature", body: "", breaking: false, rawMessage: "feat: add feature" };
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "add feature",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: add feature",
+    };
     const filesMap = new Map([["abc123", ["packages/core/src/index.ts"]]]);
     const result = assignCommitsToPackages([commit], filesMap, ["packages/core", "packages/cli"]);
     expect(result).toHaveLength(1);
@@ -64,7 +80,15 @@ describe("assignCommitsToPackages", () => {
   });
 
   it("assigns commit to multiple packages", () => {
-    const commit = { hash: "abc123", type: "fix", scope: null, description: "shared fix", body: "", breaking: false, rawMessage: "fix: shared fix" };
+    const commit = {
+      hash: "abc123",
+      type: "fix",
+      scope: null,
+      description: "shared fix",
+      body: "",
+      breaking: false,
+      rawMessage: "fix: shared fix",
+    };
     const filesMap = new Map([["abc123", ["packages/core/src/a.ts", "packages/cli/src/b.ts"]]]);
     const result = assignCommitsToPackages([commit], filesMap, ["packages/core", "packages/cli"]);
     expect(result).toHaveLength(2);
@@ -72,7 +96,15 @@ describe("assignCommitsToPackages", () => {
   });
 
   it("assigns root-level changes to single-package '.' path", () => {
-    const commit = { hash: "abc123", type: "feat", scope: null, description: "root change", body: "", breaking: false, rawMessage: "feat: root change" };
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "root change",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: root change",
+    };
     const filesMap = new Map([["abc123", ["src/index.ts"]]]);
     const result = assignCommitsToPackages([commit], filesMap, ["."]);
     expect(result).toHaveLength(1);
@@ -80,7 +112,15 @@ describe("assignCommitsToPackages", () => {
   });
 
   it("ignores files not matching any package", () => {
-    const commit = { hash: "abc123", type: "fix", scope: null, description: "root fix", body: "", breaking: false, rawMessage: "fix: root fix" };
+    const commit = {
+      hash: "abc123",
+      type: "fix",
+      scope: null,
+      description: "root fix",
+      body: "",
+      breaking: false,
+      rawMessage: "fix: root fix",
+    };
     const filesMap = new Map([["abc123", ["README.md"]]]);
     const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
     expect(result).toHaveLength(0);

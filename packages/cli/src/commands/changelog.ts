@@ -6,7 +6,10 @@ export async function runChangelog(flags: Record<string, string | boolean | stri
   const { bumps, isMonorepo } = await runPipeline(cwd);
   const date = new Date().toISOString().slice(0, 10);
 
-  if (bumps.length === 0) { console.log("No changes to generate changelog for."); return; }
+  if (bumps.length === 0) {
+    console.log("No changes to generate changelog for.");
+    return;
+  }
 
   for (const bump of bumps) {
     if (isMonorepo) console.log(`\n--- ${bump.packageName} ---\n`);

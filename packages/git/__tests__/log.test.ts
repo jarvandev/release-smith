@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getCommits } from "../src/log";
-import { mkdtemp, rm, writeFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
 
 async function initRepo(dir: string) {
   const run = (args: string[]) => Bun.spawn(["git", ...args], { cwd: dir }).exited;
@@ -61,7 +61,12 @@ describe("getCommits", () => {
     await writeFile(join(tempDir, "file.txt"), "content");
     await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
     await Bun.spawn(
-      ["git", "commit", "-m", "feat: with body\n\nThis is the body.\n\nBREAKING CHANGE: something broke"],
+      [
+        "git",
+        "commit",
+        "-m",
+        "feat: with body\n\nThis is the body.\n\nBREAKING CHANGE: something broke",
+      ],
       { cwd: tempDir },
     ).exited;
 

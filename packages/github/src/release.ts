@@ -23,8 +23,11 @@ export function parseGitHubUrl(remoteUrl: string): { owner: string; repo: string
   return null;
 }
 
-export async function createGitHubRelease(options: CreateReleaseOptions): Promise<CreateReleaseResult> {
-  if (!options.token) return { skipped: true, reason: "GITHUB_TOKEN not set. Skipping GitHub Release creation." };
+export async function createGitHubRelease(
+  options: CreateReleaseOptions,
+): Promise<CreateReleaseResult> {
+  if (!options.token)
+    return { skipped: true, reason: "GITHUB_TOKEN not set. Skipping GitHub Release creation." };
   const response = await githubRequest(
     "POST",
     `/repos/${options.owner}/${options.repo}/releases`,

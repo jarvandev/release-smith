@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 import { discoverPackages } from "@release-smith/config";
 
 export async function runInit(flags: Record<string, string | boolean | string[]>) {
@@ -6,7 +6,10 @@ export async function runInit(flags: Record<string, string | boolean | string[]>
   const configPath = join(cwd, "release-smith.json");
 
   const file = Bun.file(configPath);
-  if (await file.exists()) { console.error("release-smith.json already exists."); process.exit(1); }
+  if (await file.exists()) {
+    console.error("release-smith.json already exists.");
+    process.exit(1);
+  }
 
   const packages = await discoverPackages(cwd, null);
   const isMonorepo = packages.length > 1 || packages[0]?.path !== ".";
@@ -20,7 +23,7 @@ export async function runInit(flags: Record<string, string | boolean | string[]>
     config = {};
   }
 
-  await Bun.write(configPath, JSON.stringify(config, null, 2) + "\n");
+  await Bun.write(configPath, `${JSON.stringify(config, null, 2)}\n`);
   console.log(`Created ${configPath}`);
 
   if (isMonorepo) {

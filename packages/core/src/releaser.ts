@@ -1,20 +1,23 @@
-import { join } from "path";
-import { readFile, writeFile } from "fs/promises";
-import { execGit } from "@release-smith/git";
-import { parseGitHubUrl, createGitHubRelease } from "@release-smith/github";
-import { generateChangelog, insertChangelog } from "./changelog-generator";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { ResolvedPackage } from "@release-smith/config";
-import type { VersionBump, ReleaseResult } from "./types";
+import { execGit } from "@release-smith/git";
+import { createGitHubRelease, parseGitHubUrl } from "@release-smith/github";
+import { generateChangelog, insertChangelog } from "./changelog-generator";
+import type { ReleaseResult, VersionBump } from "./types";
 
 export async function updatePackageVersion(packageDir: string, newVersion: string): Promise<void> {
   const pkgPath = join(packageDir, "package.json");
   const raw = await readFile(pkgPath, "utf-8");
   const pkg = JSON.parse(raw);
   pkg.version = newVersion;
-  await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
-export async function updateWorkspaceDeps(packageDir: string, versionMap: Map<string, string>): Promise<void> {
+export async function updateWorkspaceDeps(
+  packageDir: string,
+  versionMap: Map<string, string>,
+): Promise<void> {
   const pkgPath = join(packageDir, "package.json");
   const raw = await readFile(pkgPath, "utf-8");
   const pkg = JSON.parse(raw);
@@ -34,7 +37,7 @@ export async function updateWorkspaceDeps(packageDir: string, versionMap: Map<st
     }
   }
   if (changed) {
-    await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+    await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
   }
 }
 
@@ -55,7 +58,9 @@ export async function executeRelease(options: {
     const remoteUrl = await execGit(["remote", "get-url", "origin"], cwd);
     const parsed = parseGitHubUrl(remoteUrl);
     if (parsed) repoUrl = `https://github.com/${parsed.owner}/${parsed.repo}`;
-  } catch { /* no remote */ }
+  } catch {
+    /* no remote */
+  }
 
   const results: ReleaseResult[] = [];
   const versionMap = new Map(bumps.map((b) => [b.packageName, b.newVersion]));
@@ -74,7 +79,13 @@ export async function executeRelease(options: {
       await writeFile(pkg.changelogPath, newChangelog);
     }
 
-    results.push({ packageName: bump.packageName, packagePath: bump.packagePath, version: bump.newVersion, changelog, tagName });
+    results.push({
+      packageName: bump.packageName,
+      packagePath: bump.packagePath,
+      version: bump.newVersion,
+      changelog,
+      tagName,
+    });
   }
 
   if (!dryRun) {
@@ -85,9 +96,10 @@ export async function executeRelease(options: {
 
   if (!dryRun) {
     await execGit(["add", "-A"], cwd);
-    const commitMsg = results.length === 1
-      ? `chore(release): ${results[0].packageName}@${results[0].version}`
-      : `chore(release): ${results.map((r) => `${r.packageName}@${r.version}`).join(", ")}`;
+    const commitMsg =
+      results.length === 1
+        ? `chore(release): ${results[0].packageName}@${results[0].version}`
+        : `chore(release): ${results.map((r) => `${r.packageName}@${r.version}`).join(", ")}`;
     await execGit(["commit", "-m", commitMsg], cwd);
     for (const result of results) await execGit(["tag", result.tagName], cwd);
 
@@ -96,11 +108,20 @@ export async function executeRelease(options: {
     try {
       const remoteUrl = await execGit(["remote", "get-url", "origin"], cwd);
       ghInfo = parseGitHubUrl(remoteUrl);
-    } catch { /* no remote */ }
+    } catch {
+      /* no remote */
+    }
 
     if (ghInfo) {
       for (const result of results) {
-        const ghResult = await createGitHubRelease({ owner: ghInfo.owner, repo: ghInfo.repo, tag: result.tagName, name: result.tagName, body: result.changelog, token });
+        const ghResult = await createGitHubRelease({
+          owner: ghInfo.owner,
+          repo: ghInfo.repo,
+          tag: result.tagName,
+          name: result.tagName,
+          body: result.changelog,
+          token,
+        });
         if (ghResult.skipped) console.warn(`Warning: ${ghResult.reason}`);
       }
     }
@@ -110,5 +131,9 @@ export async function executeRelease(options: {
 }
 
 async function readFileSafe(path: string): Promise<string> {
-  try { return await readFile(path, "utf-8"); } catch { return ""; }
+  try {
+    return await readFile(path, "utf-8");
+  } catch {
+    return "";
+  }
 }

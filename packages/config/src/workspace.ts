@@ -1,4 +1,4 @@
-import { join, relative } from "path";
+import { join, relative } from "node:path";
 import { Glob } from "bun";
 import type { RawConfig, ResolvedPackage } from "./types";
 
@@ -26,7 +26,7 @@ export async function discoverPackages(
   // Monorepo: resolve workspace globs
   const patterns: string[] = Array.isArray(rootPkg.workspaces)
     ? rootPkg.workspaces
-    : rootPkg.workspaces.packages ?? [];
+    : (rootPkg.workspaces.packages ?? []);
 
   const packageDirs = await resolveWorkspaceGlobs(cwd, patterns);
   const hasExplicitConfig = config?.packages && Object.keys(config.packages).length > 0;
@@ -43,9 +43,7 @@ export async function discoverPackages(
     pkgDataList.push({ dir, relPath, pkg });
   }
 
-  const allWorkspaceNames = new Set(
-    pkgDataList.map((p) => p.pkg.name).filter(Boolean),
-  );
+  const allWorkspaceNames = new Set(pkgDataList.map((p) => p.pkg.name).filter(Boolean));
 
   // Second pass: resolve each package
   const resolved: ResolvedPackage[] = [];
@@ -62,10 +60,9 @@ export async function discoverPackages(
       publish = !isPrivate;
     }
 
-    const changelogPath =
-      configEntry?.changelog
-        ? join(cwd, configEntry.changelog)
-        : join(dir, "CHANGELOG.md");
+    const changelogPath = configEntry?.changelog
+      ? join(cwd, configEntry.changelog)
+      : join(dir, "CHANGELOG.md");
 
     const workspaceDeps = collectWorkspaceDeps(pkg, allWorkspaceNames);
 
@@ -83,10 +80,7 @@ export async function discoverPackages(
   return resolved;
 }
 
-function collectWorkspaceDeps(
-  pkg: Record<string, any>,
-  workspaceNames: Set<string>,
-): string[] {
+function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<string>): string[] {
   const deps: string[] = [];
   const sources = [pkg.dependencies, pkg.peerDependencies];
   for (const source of sources) {
@@ -100,10 +94,7 @@ function collectWorkspaceDeps(
   return [...new Set(deps)];
 }
 
-async function resolveWorkspaceGlobs(
-  cwd: string,
-  patterns: string[],
-): Promise<string[]> {
+async function resolveWorkspaceGlobs(cwd: string, patterns: string[]): Promise<string[]> {
   const dirs: string[] = [];
   for (const pattern of patterns) {
     const glob = new Glob(pattern);

@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 import type { RawConfig } from "./types";
 
 const CONFIG_FILENAME = "release-smith.json";

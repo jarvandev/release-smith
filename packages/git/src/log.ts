@@ -17,10 +17,7 @@ export async function getCommits(
   const range = fromRef ? `${fromRef}..${toRef}` : toRef;
   const format = [`%H`, `%s`, `%b`].join(FIELD_SEP);
 
-  const output = await execGit(
-    ["log", range, `--format=${format}${SEPARATOR}`],
-    cwd,
-  );
+  const output = await execGit(["log", range, `--format=${format}${SEPARATOR}`], cwd);
 
   if (!output) return [];
 

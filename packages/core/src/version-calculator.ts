@@ -7,13 +7,19 @@ const TYPE_TO_BUMP: Record<string, BumpLevel> = { fix: "patch", feat: "minor" };
 export function bumpVersion(current: string, level: BumpLevel): string {
   const [major, minor, patch] = current.split(".").map(Number);
   switch (level) {
-    case "major": return `${major + 1}.0.0`;
-    case "minor": return `${major}.${minor + 1}.0`;
-    case "patch": return `${major}.${minor}.${patch + 1}`;
+    case "major":
+      return `${major + 1}.0.0`;
+    case "minor":
+      return `${major}.${minor + 1}.0`;
+    case "patch":
+      return `${major}.${minor}.${patch + 1}`;
   }
 }
 
-export function calculateVersionBumps(packages: ResolvedPackage[], packageCommits: PackageCommit[]): VersionBump[] {
+export function calculateVersionBumps(
+  packages: ResolvedPackage[],
+  packageCommits: PackageCommit[],
+): VersionBump[] {
   const packageByPath = new Map(packages.map((p) => [p.path, p]));
   const packageByName = new Map(packages.map((p) => [p.name, p]));
 
@@ -102,7 +108,11 @@ function getHighestBump(commits: ConventionalCommit[]): BumpLevel | null {
 
 export function detectCircularDeps(packages: ResolvedPackage[]): string[] | null {
   const packageByName = new Map(packages.map((p) => [p.name, p]));
-  enum State { Unvisited, Visiting, Visited }
+  enum State {
+    Unvisited,
+    Visiting,
+    Visited,
+  }
   const state = new Map<string, State>();
   const parent = new Map<string, string>();
   for (const pkg of packages) state.set(pkg.name, State.Unvisited);

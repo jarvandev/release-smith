@@ -3,7 +3,12 @@ export interface GitHubClientOptions {
   baseUrl?: string;
 }
 
-export async function githubRequest(method: string, path: string, options: GitHubClientOptions, body?: object): Promise<Response> {
+export async function githubRequest(
+  method: string,
+  path: string,
+  options: GitHubClientOptions,
+  body?: object,
+): Promise<Response> {
   const baseUrl = options.baseUrl ?? "https://api.github.com";
   const response = await fetch(`${baseUrl}${path}`, {
     method,

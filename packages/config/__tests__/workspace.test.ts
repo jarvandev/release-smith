@@ -1,14 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { discoverPackages } from "../src/workspace";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { RawConfig } from "../src/types";
+import { discoverPackages } from "../src/workspace";
 
-async function createPackage(
-  dir: string,
-  pkg: Record<string, unknown>,
-): Promise<void> {
+async function createPackage(dir: string, pkg: Record<string, unknown>): Promise<void> {
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, "package.json"), JSON.stringify(pkg, null, 2));
 }

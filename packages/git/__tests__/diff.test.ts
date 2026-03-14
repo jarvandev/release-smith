@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getChangedFiles } from "../src/diff";
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
 
 async function initRepo(dir: string) {
   const run = (args: string[]) => Bun.spawn(["git", ...args], { cwd: dir }).exited;
@@ -13,8 +13,13 @@ async function initRepo(dir: string) {
 
 describe("getChangedFiles", () => {
   let tempDir: string;
-  beforeEach(async () => { tempDir = await mkdtemp(join(tmpdir(), "rs-diff-")); await initRepo(tempDir); });
-  afterEach(async () => { await rm(tempDir, { recursive: true }); });
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-diff-"));
+    await initRepo(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
 
   it("returns files changed in a commit", async () => {
     await mkdir(join(tempDir, "packages/core/src"), { recursive: true });

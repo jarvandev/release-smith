@@ -1,9 +1,13 @@
-import { loadConfig, discoverPackages, type ResolvedPackage } from "@release-smith/config";
-import { getCommits, getChangedFiles, getLatestVersionTag, execGit } from "@release-smith/git";
+import { discoverPackages, loadConfig, type ResolvedPackage } from "@release-smith/config";
 import {
-  parseConventionalCommit, assignCommitsToPackages, calculateVersionBumps, detectCircularDeps,
-  type VersionBump, type ConventionalCommit,
+  assignCommitsToPackages,
+  type ConventionalCommit,
+  calculateVersionBumps,
+  detectCircularDeps,
+  parseConventionalCommit,
+  type VersionBump,
 } from "@release-smith/core";
+import { execGit, getChangedFiles, getCommits, getLatestVersionTag } from "@release-smith/git";
 
 export interface PipelineResult {
   packages: ResolvedPackage[];
@@ -35,7 +39,7 @@ export async function runPipeline(cwd: string): Promise<PipelineResult> {
     } else {
       const tagDate = await execGit(["log", "-1", "--format=%ct", tag], cwd);
       const earliestDate = await execGit(["log", "-1", "--format=%ct", earliestTag], cwd);
-      if (parseInt(tagDate) < parseInt(earliestDate)) earliestTag = tag;
+      if (parseInt(tagDate, 10) < parseInt(earliestDate, 10)) earliestTag = tag;
     }
   }
 
@@ -56,7 +60,7 @@ export async function runPipeline(cwd: string): Promise<PipelineResult> {
   for (const [, tag] of packageTags) {
     if (tag && !tagTimestamps.has(tag)) {
       const ts = await execGit(["log", "-1", "--format=%ct", tag], cwd);
-      tagTimestamps.set(tag, parseInt(ts));
+      tagTimestamps.set(tag, parseInt(ts, 10));
     }
   }
 
@@ -65,7 +69,7 @@ export async function runPipeline(cwd: string): Promise<PipelineResult> {
   for (const commit of allParsed) {
     if (!commitTimestamps.has(commit.hash)) {
       const ts = await execGit(["log", "-1", "--format=%ct", commit.hash], cwd);
-      commitTimestamps.set(commit.hash, parseInt(ts));
+      commitTimestamps.set(commit.hash, parseInt(ts, 10));
     }
   }
 

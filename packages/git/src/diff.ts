@@ -1,9 +1,6 @@
 import { execGit } from "./executor";
 
-export async function getChangedFiles(
-  cwd: string,
-  commitHash: string,
-): Promise<string[]> {
+export async function getChangedFiles(cwd: string, commitHash: string): Promise<string[]> {
   const output = await execGit(
     ["diff-tree", "--no-commit-id", "--name-only", "-r", "--root", commitHash],
     cwd,

@@ -4,7 +4,10 @@ export async function runStatus(flags: Record<string, string | boolean | string[
   const cwd = (flags.cwd as string) ?? process.cwd();
   const { bumps } = await runPipeline(cwd);
 
-  if (bumps.length === 0) { console.log("All packages are up to date. No pending releases."); return; }
+  if (bumps.length === 0) {
+    console.log("All packages are up to date. No pending releases.");
+    return;
+  }
 
   console.log("Pending releases:\n");
   for (const bump of bumps) {

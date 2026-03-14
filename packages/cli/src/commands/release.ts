@@ -1,5 +1,4 @@
 import { executeRelease } from "@release-smith/core";
-import { execGit } from "@release-smith/git";
 import { runPipeline } from "../pipeline";
 
 export async function runRelease(flags: Record<string, string | boolean | string[]>) {
@@ -15,12 +14,17 @@ export async function runRelease(flags: Record<string, string | boolean | string
     const filtered = bumps.filter((b) => targeted.has(b.packageName));
     const skipped = bumps.filter((b) => !targeted.has(b.packageName));
     if (skipped.length > 0) {
-      console.warn(`Warning: Skipping untargeted packages with pending changes: ${skipped.map((b) => b.packageName).join(", ")}`);
+      console.warn(
+        `Warning: Skipping untargeted packages with pending changes: ${skipped.map((b) => b.packageName).join(", ")}`,
+      );
     }
     bumps = filtered;
   }
 
-  if (bumps.length === 0) { console.log("No packages to release."); return; }
+  if (bumps.length === 0) {
+    console.log("No packages to release.");
+    return;
+  }
   if (dryRun) console.log("Dry run - no changes will be made.\n");
 
   for (const bump of bumps) {

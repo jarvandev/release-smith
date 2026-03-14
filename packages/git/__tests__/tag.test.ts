@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { getTags, getLatestVersionTag, createTag } from "../src/tag";
-import { mkdtemp, rm, writeFile } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTag, getLatestVersionTag, getTags } from "../src/tag";
 
 async function initRepoWithCommit(dir: string) {
   const run = (args: string[]) => Bun.spawn(["git", ...args], { cwd: dir }).exited;
@@ -16,8 +16,13 @@ async function initRepoWithCommit(dir: string) {
 
 describe("getTags", () => {
   let tempDir: string;
-  beforeEach(async () => { tempDir = await mkdtemp(join(tmpdir(), "rs-tag-")); await initRepoWithCommit(tempDir); });
-  afterEach(async () => { await rm(tempDir, { recursive: true }); });
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-tag-"));
+    await initRepoWithCommit(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
 
   it("returns empty array when no tags", async () => {
     const tags = await getTags(tempDir);
@@ -35,8 +40,13 @@ describe("getTags", () => {
 
 describe("getLatestVersionTag", () => {
   let tempDir: string;
-  beforeEach(async () => { tempDir = await mkdtemp(join(tmpdir(), "rs-tag-")); await initRepoWithCommit(tempDir); });
-  afterEach(async () => { await rm(tempDir, { recursive: true }); });
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-tag-"));
+    await initRepoWithCommit(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
 
   it("returns null when no version tags", async () => {
     const tag = await getLatestVersionTag(tempDir, null);
@@ -67,8 +77,13 @@ describe("getLatestVersionTag", () => {
 
 describe("createTag", () => {
   let tempDir: string;
-  beforeEach(async () => { tempDir = await mkdtemp(join(tmpdir(), "rs-tag-")); await initRepoWithCommit(tempDir); });
-  afterEach(async () => { await rm(tempDir, { recursive: true }); });
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-tag-"));
+    await initRepoWithCommit(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
 
   it("creates a tag at HEAD", async () => {
     await createTag(tempDir, "v1.0.0");

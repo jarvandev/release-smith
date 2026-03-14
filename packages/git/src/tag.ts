@@ -32,9 +32,9 @@ export async function getLatestVersionTag(
       if (!match) return null;
       return {
         tag,
-        major: parseInt(match[1]),
-        minor: parseInt(match[2]),
-        patch: parseInt(match[3]),
+        major: parseInt(match[1], 10),
+        minor: parseInt(match[2], 10),
+        patch: parseInt(match[3], 10),
       };
     })
     .filter(Boolean) as Array<{ tag: string; major: number; minor: number; patch: number }>;

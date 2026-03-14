@@ -2,7 +2,11 @@ import type { ConventionalCommit, PackageCommit } from "./types";
 
 const CONVENTIONAL_REGEX = /^(\w+)(?:\(([^)]+)\))?(!)?\s*:\s*(.+)$/;
 
-export function parseConventionalCommit(hash: string, message: string, body: string): ConventionalCommit | null {
+export function parseConventionalCommit(
+  hash: string,
+  message: string,
+  body: string,
+): ConventionalCommit | null {
   const match = message.match(CONVENTIONAL_REGEX);
   if (!match) return null;
   const [, type, scope, bang, description] = match;
@@ -31,7 +35,7 @@ export function assignCommitsToPackages(
       for (const pkgPath of packagePaths) {
         if (pkgPath === ".") {
           matchedPaths.add(pkgPath);
-        } else if (file.startsWith(pkgPath + "/")) {
+        } else if (file.startsWith(`${pkgPath}/`)) {
           matchedPaths.add(pkgPath);
         }
       }

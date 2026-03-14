@@ -39,7 +39,7 @@ export function insertChangelog(existing: string, newEntry: string): string {
   const headerMatch = existing.match(/^# Changelog\s*\n/);
   if (headerMatch) {
     const insertPos = headerMatch.index! + headerMatch[0].length;
-    return existing.slice(0, insertPos) + "\n" + newEntry + "\n" + existing.slice(insertPos);
+    return `${existing.slice(0, insertPos)}\n${newEntry}\n${existing.slice(insertPos)}`;
   }
   return `# Changelog\n\n${newEntry}\n\n${existing}`;
 }
