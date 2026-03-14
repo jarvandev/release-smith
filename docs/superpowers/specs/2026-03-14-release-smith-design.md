@@ -141,7 +141,7 @@ The tool uses the `GITHUB_TOKEN` environment variable for GitHub API access. Req
 
 ### Tag Format
 
-- **Monorepo:** `<pkg-name>@<version>` (e.g., `cli@1.2.0`)
+- **Monorepo:** `<npm-package-name>@<version>` (e.g., `@myapp/cli@1.2.0`)
 - **Single-package:** `v<version>` (e.g., `v1.2.0`)
 
 ### `--target` and Dependency Propagation
