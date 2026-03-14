@@ -1,5 +1,6 @@
+import { access, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { Glob } from "bun";
+import fg from "fast-glob";
 import type { RawConfig, ResolvedPackage } from "./types";
 
 export async function discoverPackages(
@@ -95,24 +96,25 @@ function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<stri
 }
 
 async function resolveWorkspaceGlobs(cwd: string, patterns: string[]): Promise<string[]> {
-  const dirs: string[] = [];
-  for (const pattern of patterns) {
-    const glob = new Glob(pattern);
-    for await (const match of glob.scan({ cwd, onlyFiles: false })) {
-      const fullPath = join(cwd, match);
-      const pkgJsonPath = join(fullPath, "package.json");
-      if (await Bun.file(pkgJsonPath).exists()) {
-        dirs.push(fullPath);
-      }
-    }
+  const globs = patterns.map((p) => `${p}/package.json`);
+  const matches = await fg(globs, { cwd, onlyFiles: true, absolute: true });
+  return matches.map((m) => join(m, "..")).sort();
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
   }
-  return dirs.sort();
 }
 
 async function readPackageJson(dir: string): Promise<Record<string, any>> {
-  const file = Bun.file(join(dir, "package.json"));
-  if (!(await file.exists())) {
+  const pkgPath = join(dir, "package.json");
+  if (!(await fileExists(pkgPath))) {
     throw new Error(`No package.json found in ${dir}`);
   }
-  return file.json();
+  const text = await readFile(pkgPath, "utf-8");
+  return JSON.parse(text);
 }

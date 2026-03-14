@@ -1,3 +1,4 @@
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { discoverPackages } from "@release-smith/config";
 import { defineCommand } from "citty";
@@ -17,10 +18,12 @@ export default defineCommand({
   async run({ args }) {
     const configPath = join(args.cwd, "release-smith.json");
 
-    const file = Bun.file(configPath);
-    if (await file.exists()) {
+    try {
+      await access(configPath);
       console.error("release-smith.json already exists.");
       process.exit(1);
+    } catch {
+      // File doesn't exist, proceed
     }
 
     const packages = await discoverPackages(args.cwd, null);
@@ -35,7 +38,7 @@ export default defineCommand({
       config = {};
     }
 
-    await Bun.write(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
     console.log(`Created ${configPath}`);
 
     if (isMonorepo) {

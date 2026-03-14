@@ -34,7 +34,7 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
-    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build": "bun build src/index.ts --outdir dist --target node",
     "build:compile": "bun build src/index.ts --compile --outfile dist/release-smith",
     "prepublishOnly": "bun run build"
   }

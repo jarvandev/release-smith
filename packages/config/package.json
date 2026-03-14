@@ -8,5 +8,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.3"
   }
 }
