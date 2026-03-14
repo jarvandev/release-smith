@@ -12,10 +12,6 @@
   "engines": {
     "node": ">=18"
   },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jarvandev/release-smith.git",

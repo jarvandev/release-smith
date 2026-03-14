@@ -2,7 +2,12 @@
 
 export { generateChangelog, insertChangelog } from "./changelog-generator";
 export { assignCommitsToPackages, parseConventionalCommit } from "./commit-parser";
-export { executeRelease, updatePackageVersion, updateWorkspaceDeps } from "./releaser";
+export {
+  executeRelease,
+  publishGitHubReleases,
+  updatePackageVersion,
+  updateWorkspaceDeps,
+} from "./releaser";
 export type {
   BumpLevel,
   ChangelogEntry,

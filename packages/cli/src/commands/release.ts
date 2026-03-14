@@ -1,4 +1,5 @@
-import { executeRelease } from "@release-smith/core";
+import { executeRelease, publishGitHubReleases } from "@release-smith/core";
+import { execGit } from "@release-smith/git";
 import { defineCommand } from "citty";
 import { runPipeline } from "../pipeline";
 
@@ -17,6 +18,16 @@ export default defineCommand({
       type: "string",
       description: "Release only specified packages (comma-separated)",
     },
+    push: {
+      type: "boolean",
+      description: "Push commits and tags to remote after release",
+      default: false,
+    },
+    "github-release": {
+      type: "boolean",
+      description: "Create GitHub Releases after push (implies --push)",
+      default: false,
+    },
     cwd: {
       type: "string",
       description: "Specify working directory",
@@ -25,6 +36,8 @@ export default defineCommand({
   },
   async run({ args }) {
     const dryRun = args["dry-run"];
+    const shouldPush = args.push || args["github-release"];
+    const shouldGitHubRelease = args["github-release"];
     const targetPkgs = args.target ? args.target.split(",").map((s) => s.trim()) : [];
 
     const { packages, bumps: allBumps, isMonorepo } = await runPipeline(args.cwd);
@@ -58,6 +71,18 @@ export default defineCommand({
     if (!dryRun) {
       console.log("\nRelease complete!");
       for (const result of results) console.log(`  ${result.tagName}`);
+
+      if (shouldPush) {
+        console.log("\nPushing to remote...");
+        await execGit(["push"], args.cwd);
+        await execGit(["push", "--tags"], args.cwd);
+        console.log("Pushed.");
+      }
+
+      if (shouldGitHubRelease) {
+        console.log("\nCreating GitHub Releases...");
+        await publishGitHubReleases(args.cwd, results);
+      }
     }
   },
 });

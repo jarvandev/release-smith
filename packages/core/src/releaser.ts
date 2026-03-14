@@ -41,6 +41,10 @@ export async function updateWorkspaceDeps(
   }
 }
 
+/**
+ * Execute release: bump versions, write changelogs, commit, tag.
+ * Does NOT create GitHub Releases (use publishGitHubReleases after pushing).
+ */
 export async function executeRelease(options: {
   cwd: string;
   bumps: VersionBump[];
@@ -92,9 +96,7 @@ export async function executeRelease(options: {
     for (const pkg of packages) {
       await updateWorkspaceDeps(join(cwd, pkg.path), versionMap);
     }
-  }
 
-  if (!dryRun) {
     await execGit(["add", "-A"], cwd);
     const first = results[0];
     const commitMsg =
@@ -103,32 +105,46 @@ export async function executeRelease(options: {
         : `chore(release): ${results.map((r) => `${r.packageName}@${r.version}`).join(", ")}`;
     await execGit(["commit", "-m", commitMsg], cwd);
     for (const result of results) await execGit(["tag", result.tagName], cwd);
-
-    const token = process.env.GITHUB_TOKEN ?? null;
-    let ghInfo: { owner: string; repo: string } | null = null;
-    try {
-      const remoteUrl = await execGit(["remote", "get-url", "origin"], cwd);
-      ghInfo = parseGitHubUrl(remoteUrl);
-    } catch {
-      /* no remote */
-    }
-
-    if (ghInfo) {
-      for (const result of results) {
-        const ghResult = await createGitHubRelease({
-          owner: ghInfo.owner,
-          repo: ghInfo.repo,
-          tag: result.tagName,
-          name: result.tagName,
-          body: result.changelog,
-          token,
-        });
-        if (ghResult.skipped) console.warn(`Warning: ${ghResult.reason}`);
-      }
-    }
   }
 
   return results;
+}
+
+/**
+ * Create GitHub Releases for the given release results.
+ * Call this AFTER pushing commits and tags to remote.
+ */
+export async function publishGitHubReleases(cwd: string, results: ReleaseResult[]): Promise<void> {
+  const token = process.env.GITHUB_TOKEN ?? null;
+
+  let ghInfo: { owner: string; repo: string } | null = null;
+  try {
+    const remoteUrl = await execGit(["remote", "get-url", "origin"], cwd);
+    ghInfo = parseGitHubUrl(remoteUrl);
+  } catch {
+    /* no remote */
+  }
+
+  if (!ghInfo) {
+    console.warn("Warning: No GitHub remote found. Skipping GitHub Release creation.");
+    return;
+  }
+
+  for (const result of results) {
+    const ghResult = await createGitHubRelease({
+      owner: ghInfo.owner,
+      repo: ghInfo.repo,
+      tag: result.tagName,
+      name: result.tagName,
+      body: result.changelog,
+      token,
+    });
+    if (ghResult.skipped) {
+      console.warn(`Warning: ${ghResult.reason}`);
+    } else {
+      console.log(`GitHub Release created: ${ghResult.url}`);
+    }
+  }
 }
 
 async function readFileSafe(path: string): Promise<string> {
