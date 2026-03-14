@@ -5,6 +5,7 @@
   "scripts": {
     "test": "bun test --recursive",
     "build": "bun run --filter '*' build",
+    "build:binary": "bun run scripts/build.ts",
     "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {

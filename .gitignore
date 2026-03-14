@@ -1,0 +1,12 @@
+# Node
+node_modules/
+dist/
+*.tgz
+
+# IDE
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
