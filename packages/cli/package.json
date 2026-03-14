@@ -1,0 +1,18 @@
+{
+  "name": "release-smith",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "release-smith": "src/index.ts"
+  },
+  "dependencies": {
+    "@release-smith/config": "workspace:*",
+    "@release-smith/git": "workspace:*",
+    "@release-smith/core": "workspace:*",
+    "@release-smith/github": "workspace:*"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  }
+}

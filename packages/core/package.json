@@ -1,0 +1,17 @@
+{
+  "name": "@release-smith/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@release-smith/config": "workspace:*",
+    "@release-smith/git": "workspace:*",
+    "@release-smith/github": "workspace:*"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  }
+}

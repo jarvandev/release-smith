@@ -1,0 +1,63 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "release-smith-monorepo",
+      "devDependencies": {
+        "bun-types": "^1.3.10",
+      },
+    },
+    "packages/cli": {
+      "name": "release-smith",
+      "version": "0.1.0",
+      "bin": {
+        "release-smith": "src/index.ts",
+      },
+      "dependencies": {
+        "@release-smith/config": "workspace:*",
+        "@release-smith/core": "workspace:*",
+        "@release-smith/git": "workspace:*",
+        "@release-smith/github": "workspace:*",
+      },
+    },
+    "packages/config": {
+      "name": "@release-smith/config",
+      "version": "0.1.0",
+    },
+    "packages/core": {
+      "name": "@release-smith/core",
+      "version": "0.1.0",
+      "dependencies": {
+        "@release-smith/config": "workspace:*",
+        "@release-smith/git": "workspace:*",
+        "@release-smith/github": "workspace:*",
+      },
+    },
+    "packages/git": {
+      "name": "@release-smith/git",
+      "version": "0.1.0",
+    },
+    "packages/github": {
+      "name": "@release-smith/github",
+      "version": "0.1.0",
+    },
+  },
+  "packages": {
+    "@release-smith/config": ["@release-smith/config@workspace:packages/config"],
+
+    "@release-smith/core": ["@release-smith/core@workspace:packages/core"],
+
+    "@release-smith/git": ["@release-smith/git@workspace:packages/git"],
+
+    "@release-smith/github": ["@release-smith/github@workspace:packages/github"],
+
+    "@types/node": ["@types/node@25.5.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-jp2P3tQMSxWugkCUKLRPVUpGaL5MVFwF8RDuSRztfwgN1wmqJeMSbKlnEtQqU8UrhTmzEmZdu2I6v2dpp7XIxw=="],
+
+    "bun-types": ["bun-types@1.3.10", "", { "dependencies": { "@types/node": "*" } }, "sha512-tcpfCCl6XWo6nCVnpcVrxQ+9AYN1iqMIzgrSKYMB/fjLtV2eyAVEg7AxQJuCq/26R6HpKWykQXuSOq/21RYcbg=="],
+
+    "release-smith": ["release-smith@workspace:packages/cli"],
+
+    "undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
+  }
+}
