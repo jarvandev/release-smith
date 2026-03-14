@@ -19,12 +19,11 @@
     "changelog",
     "semver",
     "conventional-commits",
-    "monorepo",
-    "bun"
+    "monorepo"
   ],
   "license": "MIT",
   "author": "jarvandev",
-  "dependencies": {
+  "devDependencies": {
     "@release-smith/config": "workspace:*",
     "@release-smith/core": "workspace:*",
     "@release-smith/git": "workspace:*",

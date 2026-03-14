@@ -1,10 +1,17 @@
 {
   "name": "@release-smith/github",
   "version": "0.1.0",
-  "private": true,
+  "description": "GitHub API client for release-smith",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jarvandev/release-smith.git",
+    "directory": "packages/github"
+  },
+  "license": "MIT",
+  "author": "jarvandev",
   "scripts": {
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit"

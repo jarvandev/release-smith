@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build CLI
+        run: bun run build
+
+      - name: Run release-smith
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun run dev release
+
+      - name: Push release commit and tags
+        run: |
+          git push
+          git push --tags
+
+      - name: Publish all packages to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          for pkg in packages/config packages/git packages/github packages/core packages/cli; do
+            echo "Publishing $pkg..."
+            cd "$pkg"
+            bun publish --access public || true
+            cd -
+          done

@@ -14,9 +14,9 @@
       "name": "release-smith",
       "version": "0.1.0",
       "bin": {
-        "release-smith": "src/index.ts",
+        "release-smith": "dist/index.js",
       },
-      "dependencies": {
+      "devDependencies": {
         "@release-smith/config": "workspace:*",
         "@release-smith/core": "workspace:*",
         "@release-smith/git": "workspace:*",
