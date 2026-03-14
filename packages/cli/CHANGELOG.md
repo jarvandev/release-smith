@@ -1,5 +1,12 @@
 # Changelog
 
+
+## [0.3.0] - 2026-03-14
+
+### Features
+
+- add Release PR mode for verified commits ([0256b84](https://github.com/jarvandev/release-smith/commit/0256b842a9bce5420386290f382343d2fac013ac))
+
 ## [0.2.0] - 2026-03-14
 
 ### Features
