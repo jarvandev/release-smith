@@ -14,7 +14,7 @@
     "format": "bunx biome format --write .",
     "format:check": "bunx biome format .",
     "check": "bun run typecheck && bun run lint && bun run test",
-    "build:binary": "bun run scripts/build.ts"
+    "build:binary": "bun --filter release-smith build"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",

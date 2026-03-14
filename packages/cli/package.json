@@ -1,6 +1,6 @@
 {
   "name": "release-smith",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "type": "module",
   "bin": {
     "release-smith": "src/index.ts"
@@ -14,6 +14,7 @@
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "build": "bun run scripts/build.ts"
   }
 }
