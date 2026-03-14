@@ -1,10 +1,29 @@
 {
   "name": "release-smith",
   "version": "0.1.0",
+  "description": "Lightweight release management tool for Node.js/Bun",
   "type": "module",
   "bin": {
-    "release-smith": "src/index.ts"
+    "release-smith": "dist/index.js"
   },
+  "files": [
+    "dist/index.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jarvandev/release-smith.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "release",
+    "changelog",
+    "semver",
+    "conventional-commits",
+    "monorepo",
+    "bun"
+  ],
+  "license": "MIT",
+  "author": "jarvandev",
   "dependencies": {
     "@release-smith/config": "workspace:*",
     "@release-smith/core": "workspace:*",
@@ -15,6 +34,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
-    "build": "bun run scripts/build.ts"
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build:compile": "bun build src/index.ts --compile --outfile dist/release-smith",
+    "prepublishOnly": "bun run build"
   }
 }
