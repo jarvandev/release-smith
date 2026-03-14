@@ -1,5 +1,6 @@
 export { loadConfig } from "./loader";
 export type {
+  BranchConfig,
   PackageConfig,
   RawConfig,
   ResolvedPackage,

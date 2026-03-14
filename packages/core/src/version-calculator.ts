@@ -5,6 +5,13 @@ import type { BumpLevel, ConventionalCommit, PackageCommit, VersionBump } from "
 const BUMP_ORDER: Record<BumpLevel, number> = { patch: 0, minor: 1, major: 2 };
 const TYPE_TO_BUMP: Record<string, BumpLevel> = { fix: "patch", feat: "minor" };
 
+export interface PrereleaseOptions {
+  /** Pre-release identifier, e.g., "beta", "alpha", "rc". */
+  preid: string;
+  /** Map of packagePath -> last stable version (from the latest stable tag). */
+  lastStableVersions: Map<string, string>;
+}
+
 export function bumpVersion(current: string, level: BumpLevel): string {
   const result = semver.inc(current, level);
   if (!result) {
@@ -13,9 +20,40 @@ export function bumpVersion(current: string, level: BumpLevel): string {
   return result;
 }
 
+/**
+ * Calculate the next pre-release version.
+ *
+ * Uses ALL commits since the last STABLE tag to determine the target
+ * stable version, then either increments the pre-release number (if
+ * already heading towards that target) or starts a new pre-release
+ * sequence.
+ */
+export function bumpPrerelease(
+  current: string,
+  lastStableVersion: string,
+  level: BumpLevel,
+  preid: string,
+): string {
+  const targetStable = semver.inc(lastStableVersion, level);
+  if (!targetStable) {
+    throw new Error(`Failed to bump version "${lastStableVersion}" by "${level}"`);
+  }
+
+  const parsed = semver.parse(current);
+  if (parsed && parsed.prerelease.length > 0 && parsed.prerelease[0] === preid) {
+    const currentBase = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+    if (currentBase === targetStable) {
+      return semver.inc(current, "prerelease", preid)!;
+    }
+  }
+
+  return `${targetStable}-${preid}.0`;
+}
+
 export function calculateVersionBumps(
   packages: ResolvedPackage[],
   packageCommits: PackageCommit[],
+  prerelease?: PrereleaseOptions,
 ): VersionBump[] {
   const packageByPath = new Map(packages.map((p) => [p.path, p]));
   const packageByName = new Map(packages.map((p) => [p.name, p]));
@@ -79,11 +117,20 @@ export function calculateVersionBumps(
       commits = [];
     }
 
+    const newVersion = prerelease
+      ? bumpPrerelease(
+          pkg.version,
+          prerelease.lastStableVersions.get(pkg.path) ?? pkg.version,
+          level,
+          prerelease.preid,
+        )
+      : bumpVersion(pkg.version, level);
+
     results.push({
       packagePath: pkg.path,
       packageName: pkg.name,
       currentVersion: pkg.version,
-      newVersion: bumpVersion(pkg.version, level),
+      newVersion,
       level,
       commits,
       propagated: isResultPropagated,

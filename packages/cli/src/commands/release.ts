@@ -29,6 +29,10 @@ export default defineCommand({
       description: "Create GitHub Releases after push (implies --push)",
       default: false,
     },
+    prerelease: {
+      type: "string",
+      description: "Pre-release identifier (e.g., beta, alpha, rc). Overrides branch config.",
+    },
     pr: {
       type: "boolean",
       description: "Create a Release PR instead of committing directly",
@@ -55,7 +59,11 @@ export default defineCommand({
       throw new Error("--pr is mutually exclusive with --push and --github-release.");
     }
 
-    const { packages, bumps: allBumps, isMonorepo } = await runPipeline(args.cwd);
+    const {
+      packages,
+      bumps: allBumps,
+      isMonorepo,
+    } = await runPipeline(args.cwd, { prerelease: args.prerelease });
 
     let bumps = allBumps;
     const targetPkgs = args.target ? args.target.split(",").map((s) => s.trim()) : [];

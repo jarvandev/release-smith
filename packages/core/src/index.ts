@@ -19,4 +19,10 @@ export type {
   ReleaseResult,
   VersionBump,
 } from "./types";
-export { bumpVersion, calculateVersionBumps, detectCircularDeps } from "./version-calculator";
+export type { PrereleaseOptions } from "./version-calculator";
+export {
+  bumpPrerelease,
+  bumpVersion,
+  calculateVersionBumps,
+  detectCircularDeps,
+} from "./version-calculator";

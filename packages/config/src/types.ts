@@ -5,8 +5,15 @@ export interface PackageConfig {
   changelog: string;
 }
 
+export interface BranchConfig {
+  /** Pre-release identifier (e.g., "beta", "alpha", "rc"). */
+  prerelease: string;
+}
+
 export interface RawConfig {
   packages?: Record<string, Partial<Pick<PackageConfig, "publish" | "changelog">>>;
+  /** Branch-based release configuration. Maps branch names to release behavior. */
+  branches?: Record<string, BranchConfig>;
 }
 
 export interface ResolvedPackage {

@@ -4,10 +4,16 @@ import {
   type ConventionalCommit,
   calculateVersionBumps,
   detectCircularDeps,
+  type PrereleaseOptions,
   parseConventionalCommit,
   type VersionBump,
 } from "@release-smith/core";
 import { execGit, getChangedFiles, getCommits, getLatestVersionTag } from "@release-smith/git";
+
+export interface PipelineOptions {
+  /** Explicit pre-release identifier (overrides branch config). */
+  prerelease?: string;
+}
 
 export interface PipelineResult {
   packages: ResolvedPackage[];
@@ -15,10 +21,27 @@ export interface PipelineResult {
   isMonorepo: boolean;
 }
 
-export async function runPipeline(cwd: string): Promise<PipelineResult> {
+function extractVersionFromTag(tag: string, packageName: string | null): string {
+  if (packageName) {
+    return tag.slice(packageName.length + 1);
+  }
+  return tag.slice(1);
+}
+
+export async function runPipeline(cwd: string, options?: PipelineOptions): Promise<PipelineResult> {
   const config = await loadConfig(cwd);
   const packages = await discoverPackages(cwd, config);
   const isMonorepo = packages.length > 1 || packages[0]?.path !== ".";
+
+  // Resolve pre-release: CLI flag takes precedence, then branch config
+  let preid = options?.prerelease;
+  if (!preid && config?.branches) {
+    const branch = (await execGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd)).trim();
+    const branchConfig = config.branches[branch];
+    if (branchConfig?.prerelease) {
+      preid = branchConfig.prerelease;
+    }
+  }
 
   const cycle = detectCircularDeps(packages);
   if (cycle) throw new Error(`Circular dependency detected: ${cycle.join(" -> ")}`);
@@ -87,6 +110,22 @@ export async function runPipeline(cwd: string): Promise<PipelineResult> {
     return commitTs > tagTs;
   });
 
-  const bumps = calculateVersionBumps(packages, filteredPackageCommits);
+  let prereleaseOpts: PrereleaseOptions | undefined;
+  if (preid) {
+    const lastStableVersions = new Map<string, string>();
+    for (const pkg of packages) {
+      const tag = packageTags.get(pkg.path);
+      if (tag) {
+        const pkgName = isMonorepo ? pkg.name : null;
+        lastStableVersions.set(pkg.path, extractVersionFromTag(tag, pkgName));
+      } else {
+        // No stable tag: strip prerelease suffix from package.json version
+        lastStableVersions.set(pkg.path, pkg.version.replace(/-.*$/, ""));
+      }
+    }
+    prereleaseOpts = { preid, lastStableVersions };
+  }
+
+  const bumps = calculateVersionBumps(packages, filteredPackageCommits, prereleaseOpts);
   return { packages, bumps, isMonorepo };
 }

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import type { ResolvedPackage } from "@release-smith/config";
 import type { ConventionalCommit } from "../src/types";
-import { bumpVersion, calculateVersionBumps, detectCircularDeps } from "../src/version-calculator";
+import {
+  bumpPrerelease,
+  bumpVersion,
+  calculateVersionBumps,
+  detectCircularDeps,
+} from "../src/version-calculator";
 
 function makeCommit(overrides: Partial<ConventionalCommit> = {}): ConventionalCommit {
   return {
@@ -141,6 +146,99 @@ describe("calculateVersionBumps", () => {
     const cli = bumps.find((b) => b.packageName === "@myapp/cli")!;
     expect(cli.newVersion).toBe("1.1.0");
     expect(cli.propagated).toBe(false);
+  });
+});
+
+describe("bumpPrerelease", () => {
+  it("starts new prerelease from stable version", () => {
+    expect(bumpPrerelease("1.0.0", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.0");
+  });
+
+  it("starts new prerelease for patch", () => {
+    expect(bumpPrerelease("1.0.0", "1.0.0", "patch", "beta")).toBe("1.0.1-beta.0");
+  });
+
+  it("starts new prerelease for major", () => {
+    expect(bumpPrerelease("1.0.0", "1.0.0", "major", "beta")).toBe("2.0.0-beta.0");
+  });
+
+  it("increments existing prerelease with same target", () => {
+    expect(bumpPrerelease("1.1.0-beta.0", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.1");
+  });
+
+  it("increments higher prerelease number", () => {
+    expect(bumpPrerelease("1.1.0-beta.5", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.6");
+  });
+
+  it("escalates to new major when level increases", () => {
+    expect(bumpPrerelease("1.1.0-beta.3", "1.0.0", "major", "beta")).toBe("2.0.0-beta.0");
+  });
+
+  it("starts new sequence when preid changes", () => {
+    expect(bumpPrerelease("1.1.0-alpha.5", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.0");
+  });
+
+  it("supports rc preid", () => {
+    expect(bumpPrerelease("2.0.0-beta.3", "1.0.0", "major", "rc")).toBe("2.0.0-rc.0");
+  });
+
+  it("uses current version as stable base when no tag", () => {
+    expect(bumpPrerelease("0.0.0", "0.0.0", "minor", "beta")).toBe("0.1.0-beta.0");
+  });
+});
+
+describe("calculateVersionBumps with prerelease", () => {
+  it("produces prerelease version for fix", () => {
+    const bumps = calculateVersionBumps(
+      [makePackage()],
+      [{ packagePath: "packages/core", commit: makeCommit({ type: "fix" }) }],
+      { preid: "beta", lastStableVersions: new Map([["packages/core", "1.0.0"]]) },
+    );
+    expect(bumps[0].newVersion).toBe("1.0.1-beta.0");
+  });
+
+  it("produces prerelease version for feat", () => {
+    const bumps = calculateVersionBumps(
+      [makePackage()],
+      [{ packagePath: "packages/core", commit: makeCommit({ type: "feat" }) }],
+      { preid: "beta", lastStableVersions: new Map([["packages/core", "1.0.0"]]) },
+    );
+    expect(bumps[0].newVersion).toBe("1.1.0-beta.0");
+  });
+
+  it("increments existing prerelease", () => {
+    const bumps = calculateVersionBumps(
+      [makePackage({ version: "1.1.0-beta.2" })],
+      [{ packagePath: "packages/core", commit: makeCommit({ type: "feat" }) }],
+      { preid: "beta", lastStableVersions: new Map([["packages/core", "1.0.0"]]) },
+    );
+    expect(bumps[0].newVersion).toBe("1.1.0-beta.3");
+  });
+
+  it("propagated dep gets prerelease bump", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: true }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(
+      packages,
+      [{ packagePath: "packages/core", commit: makeCommit({ type: "feat" }) }],
+      {
+        preid: "beta",
+        lastStableVersions: new Map([
+          ["packages/core", "1.0.0"],
+          ["packages/cli", "1.0.0"],
+        ]),
+      },
+    );
+    const cli = bumps.find((b) => b.packageName === "@myapp/cli")!;
+    expect(cli.newVersion).toBe("1.0.1-beta.0");
+    expect(cli.propagated).toBe(true);
   });
 });
 
