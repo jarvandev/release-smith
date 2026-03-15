@@ -31,8 +31,18 @@ bun test packages/config/  # Test one package
 ## Architecture
 
 Monorepo with 5 packages: config, git, core, github, cli.
-Pipeline pattern: config -> git -> parse -> version -> changelog -> release.
-See `docs/superpowers/specs/2026-03-14-release-smith-design.md` for full spec.
+Pipeline: config -> git -> parse -> version -> changelog -> release.
+
+Key modules:
+- `pipeline.ts` -- orchestrates the full flow: tag lookup, commit collection, filtering, bump calculation
+- `version-calculator.ts` -- bump logic, prerelease, rollup from unpublished deps, version groups
+- `changelog-generator.ts` -- markdown generation (only feat/fix/breaking)
+- `releaser.ts` -- file writes (package.json, CHANGELOG.md), git commit/tag
+- `tag-format.ts` -- tag name resolution with `{name}` and `{version}` placeholders
+- `workspace.ts` -- package discovery, config resolution, workspace dep collection
+
+Config fields: packages (publish/name/from/changelog), tagFormat, branches, groups, prLabels.
+See README.md for full configuration reference and usage documentation.
 
 ## Conventions
 
