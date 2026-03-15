@@ -2,6 +2,13 @@
 
 
 
+
+## [0.5.0] - 2026-03-15
+
+### Features
+
+- add GitHub Actions outputs to release-tags command ([bfbef9a](https://github.com/jarvandev/release-smith/commit/bfbef9a408ec20cbf1f89cd8c4fbd7d72dce704f))
+
 ## [0.4.0] - 2026-03-15
 
 ### Features
