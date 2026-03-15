@@ -4,7 +4,6 @@ const SECTION_ORDER: Array<{ title: string; filter: (c: ConventionalCommit) => b
   { title: "Breaking Changes", filter: (c) => c.breaking },
   { title: "Features", filter: (c) => c.type === "feat" && !c.breaking },
   { title: "Bug Fixes", filter: (c) => c.type === "fix" && !c.breaking },
-  { title: "Other Changes", filter: (c) => c.type !== "feat" && c.type !== "fix" && !c.breaking },
 ];
 
 export function generateChangelog(bump: VersionBump, date: string, repoUrl: string | null): string {

@@ -143,7 +143,7 @@ describe("generateChangelog", () => {
     expect(result).not.toContain("dependency update");
   });
 
-  it("generates Other Changes section for non-feat/fix/breaking commits", () => {
+  it("excludes non-feat/fix/breaking commits from changelog", () => {
     const bump: VersionBump = {
       packagePath: ".",
       packageName: "my-tool",
@@ -161,14 +161,14 @@ describe("generateChangelog", () => {
       propagated: false,
     };
     const result = generateChangelog(bump, "2026-03-14", null);
-    expect(result).toContain("### Other Changes");
-    expect(result).toContain("update deps");
-    expect(result).toContain("clean up code");
-    expect(result).not.toContain("### Features");
-    expect(result).not.toContain("### Bug Fixes");
+    expect(result).not.toContain("update deps");
+    expect(result).not.toContain("clean up code");
+    expect(result).not.toContain("### Other Changes");
+    // Should still have the version header
+    expect(result).toContain("## [1.0.1]");
   });
 
-  it("renders all four sections when present", () => {
+  it("renders only breaking/feat/fix sections, excludes other types", () => {
     const bump: VersionBump = {
       packagePath: ".",
       packageName: "my-tool",
@@ -201,14 +201,11 @@ describe("generateChangelog", () => {
       propagated: false,
     };
     const result = generateChangelog(bump, "2026-03-14", null);
-    const breakingIdx = result.indexOf("### Breaking Changes");
-    const featIdx = result.indexOf("### Features");
-    const fixIdx = result.indexOf("### Bug Fixes");
-    const otherIdx = result.indexOf("### Other Changes");
-    expect(breakingIdx).toBeGreaterThanOrEqual(0);
-    expect(featIdx).toBeGreaterThan(breakingIdx);
-    expect(fixIdx).toBeGreaterThan(featIdx);
-    expect(otherIdx).toBeGreaterThan(fixIdx);
+    expect(result).toContain("### Breaking Changes");
+    expect(result).toContain("### Features");
+    expect(result).toContain("### Bug Fixes");
+    expect(result).not.toContain("### Other Changes");
+    expect(result).not.toContain("update deps");
   });
 });
 
