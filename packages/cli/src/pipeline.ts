@@ -48,8 +48,10 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
 
   // Collect per-package latest tags (only published packages have meaningful tags)
   const packageTags = new Map<string, string | null>();
-  let earliestTag: string | null = null;
-  let hasPublishedPackageWithNoTag = false;
+  // For packages with no tag, a "from" commit can serve as the baseline
+  const packageFromRefs = new Map<string, string>();
+  let earliestRef: string | null = null;
+  let hasPublishedPackageWithNoBaseline = false;
 
   for (const pkg of packages) {
     if (!pkg.publish) {
@@ -60,17 +62,26 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     const tag = await getLatestVersionTag(cwd, prefix);
     packageTags.set(pkg.path, tag);
     if (tag === null) {
-      hasPublishedPackageWithNoTag = true;
-    } else if (!earliestTag) {
-      earliestTag = tag;
+      if (pkg.from) {
+        // Use "from" commit as baseline for packages that have never been released
+        packageFromRefs.set(pkg.path, pkg.from);
+      } else {
+        hasPublishedPackageWithNoBaseline = true;
+      }
+    }
+    // Track the earliest ref (tag or from) for commit fetching
+    const ref = tag ?? pkg.from ?? null;
+    if (!ref) continue;
+    if (!earliestRef) {
+      earliestRef = ref;
     } else {
-      const tagDate = await execGit(["log", "-1", "--format=%ct", tag], cwd);
-      const earliestDate = await execGit(["log", "-1", "--format=%ct", earliestTag], cwd);
-      if (parseInt(tagDate, 10) < parseInt(earliestDate, 10)) earliestTag = tag;
+      const refDate = await execGit(["log", "-1", "--format=%ct", ref], cwd);
+      const earliestDate = await execGit(["log", "-1", "--format=%ct", earliestRef], cwd);
+      if (parseInt(refDate, 10) < parseInt(earliestDate, 10)) earliestRef = ref;
     }
   }
 
-  const fromRef = hasPublishedPackageWithNoTag ? null : earliestTag;
+  const fromRef = hasPublishedPackageWithNoBaseline ? null : earliestRef;
   const rawCommits = await getCommits(cwd, fromRef, "HEAD");
   const allParsed: ConventionalCommit[] = [];
   const filesMap = new Map<string, string[]>();
@@ -103,29 +114,40 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   const packagePaths = packages.map((p) => p.path);
   const allPackageCommits = assignCommitsToPackages(allParsed, filesMap, packagePaths);
 
-  // Filter commits per-package: only include commits after each package's own tag.
-  // Unpublished packages have no tag and pass through all commits here;
+  // Resolve per-package baseline timestamps (tag or "from" commit)
+  const packageBaselineTs = new Map<string, number>();
+  for (const pkg of packages) {
+    const tag = packageTags.get(pkg.path);
+    if (tag) {
+      const ts = tagTimestamps.get(tag);
+      if (ts !== undefined) packageBaselineTs.set(pkg.path, ts);
+    } else {
+      const fromRef = packageFromRefs.get(pkg.path);
+      if (fromRef) {
+        const ts = await execGit(["log", "-1", "--format=%ct", fromRef], cwd);
+        packageBaselineTs.set(pkg.path, parseInt(ts, 10));
+      }
+    }
+  }
+
+  // Filter commits per-package: only include commits after each package's baseline.
+  // Unpublished packages have no baseline and pass through all commits here;
   // their rollup filtering is handled inside calculateVersionBumps via rollupCutoffs.
   const filteredPackageCommits = allPackageCommits.filter((pc) => {
-    const tag = packageTags.get(pc.packagePath);
-    if (!tag) return true;
-    const tagTs = tagTimestamps.get(tag);
-    if (tagTs === undefined) return true;
+    const baselineTs = packageBaselineTs.get(pc.packagePath);
+    if (baselineTs === undefined) return true;
     const commitTs = commitTimestamps.get(pc.commit.hash);
     if (commitTs === undefined) return true;
-    return commitTs > tagTs;
+    return commitTs > baselineTs;
   });
 
   // Build per-published-package cutoff timestamps for rollup filtering.
-  // Each published package uses its own tag timestamp to filter rolled-up
+  // Each published package uses its own baseline to filter rolled-up
   // commits from unpublished deps, so only new commits are included.
   const packageCutoffs = new Map<string, number>();
-  for (const pkg of packages) {
-    if (!pkg.publish) continue;
-    const tag = packageTags.get(pkg.path);
-    if (!tag) continue;
-    const ts = tagTimestamps.get(tag);
-    if (ts !== undefined) packageCutoffs.set(pkg.path, ts);
+  for (const [path, ts] of packageBaselineTs) {
+    const pkg = packages.find((p) => p.path === path);
+    if (pkg?.publish) packageCutoffs.set(path, ts);
   }
   const rollupCutoffs: RollupCutoffs = { packageCutoffs, commitTimestamps };
 

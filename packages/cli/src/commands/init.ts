@@ -1,6 +1,7 @@
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { discoverPackages } from "@release-smith/config";
+import { execGit } from "@release-smith/git";
 import { defineCommand } from "citty";
 
 export default defineCommand({
@@ -29,10 +30,15 @@ export default defineCommand({
     const packages = await discoverPackages(args.cwd, null);
     const isMonorepo = packages.length > 1 || packages[0]?.path !== ".";
 
+    // Get current HEAD commit as the starting point for all packages
+    const headCommit = (await execGit(["rev-parse", "HEAD"], args.cwd)).trim();
+
     let config: object;
     if (isMonorepo) {
-      const pkgEntries: Record<string, { publish: boolean }> = {};
-      for (const pkg of packages) pkgEntries[pkg.path] = { publish: !pkg.isPrivate };
+      const pkgEntries: Record<string, { publish: boolean; from: string }> = {};
+      for (const pkg of packages) {
+        pkgEntries[pkg.path] = { publish: !pkg.isPrivate, from: headCommit };
+      }
       config = { packages: pkgEntries };
     } else {
       config = {};
@@ -47,7 +53,8 @@ export default defineCommand({
         const publishStr = pkg.isPrivate ? "publish: false" : "publish: true";
         console.log(`  ${pkg.path} (${publishStr})`);
       }
-      console.log("\nEdit release-smith.json to customize which packages to publish.");
+      console.log(`\nAll packages initialized with from: ${headCommit.slice(0, 7)}`);
+      console.log("Edit release-smith.json to customize which packages to publish.");
     }
   },
 });

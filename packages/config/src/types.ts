@@ -5,6 +5,8 @@ export interface PackageConfig {
   changelog: string;
   /** Override the package name used in tags, changelogs, and commit messages. */
   name: string;
+  /** Starting commit hash. Only commits after this are considered for the first release. */
+  from: string;
 }
 
 export interface BranchConfig {
@@ -13,7 +15,10 @@ export interface BranchConfig {
 }
 
 export interface RawConfig {
-  packages?: Record<string, Partial<Pick<PackageConfig, "publish" | "changelog" | "name">>>;
+  packages?: Record<
+    string,
+    Partial<Pick<PackageConfig, "publish" | "changelog" | "name" | "from">>
+  >;
   /** Branch-based release configuration. Maps branch names to release behavior. */
   branches?: Record<string, BranchConfig>;
   /**
@@ -49,4 +54,6 @@ export interface ResolvedPackage {
   isPrivate: boolean;
   /** dependencies + peerDependencies that are in the workspace */
   workspaceDeps: string[];
+  /** Starting commit hash for first release (used when no tag exists) */
+  from?: string;
 }

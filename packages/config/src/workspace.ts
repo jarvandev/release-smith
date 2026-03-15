@@ -75,6 +75,7 @@ export async function discoverPackages(
       version: pkg.version ?? "0.0.0",
       isPrivate,
       workspaceDeps,
+      from: configEntry?.from,
     });
   }
 
