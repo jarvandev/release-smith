@@ -41,8 +41,10 @@ export function insertChangelog(existing: string, newEntry: string): string {
   if (!existing.trim()) return `# Changelog\n\n${newEntry}\n`;
   const headerMatch = existing.match(/^# Changelog\s*\n/);
   if (headerMatch) {
-    const insertPos = headerMatch.index! + headerMatch[0].length;
-    return `${existing.slice(0, insertPos)}\n${newEntry}\n${existing.slice(insertPos)}`;
+    // Skip any blank lines after the header, then insert the new entry
+    const afterHeader = headerMatch.index! + headerMatch[0].length;
+    const rest = existing.slice(afterHeader).replace(/^\n+/, "");
+    return `# Changelog\n\n${newEntry}\n${rest}`;
   }
   return `# Changelog\n\n${newEntry}\n\n${existing}`;
 }
