@@ -1,6 +1,25 @@
 # Changelog
 
 
+
+## [0.4.0] - 2026-03-15
+
+### Features
+
+- add "from" config to set starting commit for new packages ([4162f6e](https://github.com/jarvandev/release-smith/commit/4162f6e479b260ca660390cb34c07ee2b2b849a2))
+- add automatic PR label support ([5615df6](https://github.com/jarvandev/release-smith/commit/5615df64bb3877e56661e8fc7a067f17af6681a0))
+- add linked/fixed version groups ([4b3010f](https://github.com/jarvandev/release-smith/commit/4b3010f51ebd6775b2a19e9c2f6fcb5f3e376f60))
+- add configurable tag format ([577c5db](https://github.com/jarvandev/release-smith/commit/577c5dbc9392e528eaf1127e1f1a43674ae907ba))
+- add pre-release version support ([0829f5e](https://github.com/jarvandev/release-smith/commit/0829f5e3790b8a285139ac79e267aaf70ff8ed7c))
+- add configurable package name override and devDependencies tracking ([211f25e](https://github.com/jarvandev/release-smith/commit/211f25e6410f4034f07db0bb5a4ebe704aaf9df2))
+- roll up commits from unpublished deps into parent changelog ([0eabd82](https://github.com/jarvandev/release-smith/commit/0eabd82af5080d99b72a8c53e965993cac53c7f4))
+
+### Bug Fixes
+
+- per-consumer rollup filtering for multi-published-package monorepos ([027a7f6](https://github.com/jarvandev/release-smith/commit/027a7f6489a49c5fc110ec532646ec77be369365))
+- exclude non-feat/fix/breaking commits from changelog ([3283094](https://github.com/jarvandev/release-smith/commit/3283094afbe04843d83e6233c12755146c7aab96))
+- address code review findings ([16e0213](https://github.com/jarvandev/release-smith/commit/16e0213e0e467bcbd1bfa160a5fde31f4ac54331))
+
 ## [0.3.0] - 2026-03-14
 
 ### Features
