@@ -1,3 +1,4 @@
+import { appendFile } from "node:fs/promises";
 import { createReleaseTags, publishGitHubReleases } from "@release-smith/core";
 import { execGit } from "@release-smith/git";
 import { getPullRequest, parseGitHubUrl } from "@release-smith/github";
@@ -83,5 +84,52 @@ export default defineCommand({
       console.log("\nCreating GitHub Releases...");
       await publishGitHubReleases(cwd, results);
     }
+
+    // Write GitHub Actions outputs when running in CI
+    await writeGitHubOutputs(results);
   },
 });
+
+/**
+ * Write release outputs to $GITHUB_OUTPUT when running in GitHub Actions.
+ *
+ * Outputs (compatible with release-please style):
+ *   releases_created       = "true"
+ *   <name>--release_created = "true"
+ *   <name>--tag_name        = "pkg@1.0.0"
+ *   <name>--version         = "1.0.0"
+ *   all                     = JSON array of all releases
+ *
+ * Package names are sanitized: `@scope/pkg` -> `scope-pkg` (slashes/@ removed)
+ */
+async function writeGitHubOutputs(
+  results: Array<{ packageName: string; version: string; tagName: string }>,
+): Promise<void> {
+  const outputFile = process.env.GITHUB_OUTPUT;
+  if (!outputFile) return;
+
+  const lines: string[] = [];
+  lines.push("releases_created=true");
+
+  for (const r of results) {
+    const key = sanitizeOutputKey(r.packageName);
+    lines.push(`${key}--release_created=true`);
+    lines.push(`${key}--tag_name=${r.tagName}`);
+    lines.push(`${key}--version=${r.version}`);
+  }
+
+  const allJson = JSON.stringify(
+    results.map((r) => ({
+      packageName: r.packageName,
+      version: r.version,
+      tagName: r.tagName,
+    })),
+  );
+  lines.push(`all=${allJson}`);
+
+  await appendFile(outputFile, `${lines.join("\n")}\n`);
+}
+
+function sanitizeOutputKey(name: string): string {
+  return name.replace(/@/g, "").replace(/\//g, "-");
+}
