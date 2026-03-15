@@ -20,7 +20,7 @@ export type {
   ReleaseResult,
   VersionBump,
 } from "./types";
-export type { PrereleaseOptions } from "./version-calculator";
+export type { PrereleaseOptions, RollupCutoffs } from "./version-calculator";
 export {
   applyVersionGroups,
   bumpPrerelease,

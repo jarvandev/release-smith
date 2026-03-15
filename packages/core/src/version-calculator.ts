@@ -12,6 +12,21 @@ export interface PrereleaseOptions {
   lastStableVersions: Map<string, string>;
 }
 
+/**
+ * Optional timestamp-based filter for rolled-up commits.
+ *
+ * Each published package has its own tag cutoff timestamp.
+ * During rollup, only commits NEWER than the consuming published
+ * package's cutoff are included. This prevents unpublished dep
+ * commits that were already released from being rolled up again.
+ */
+export interface RollupCutoffs {
+  /** Map of published packagePath -> tag timestamp (epoch seconds). */
+  packageCutoffs: Map<string, number>;
+  /** Map of commit hash -> timestamp (epoch seconds). */
+  commitTimestamps: Map<string, number>;
+}
+
 export function bumpVersion(current: string, level: BumpLevel): string {
   const result = semver.inc(current, level);
   if (!result) {
@@ -54,6 +69,7 @@ export function calculateVersionBumps(
   packages: ResolvedPackage[],
   packageCommits: PackageCommit[],
   prerelease?: PrereleaseOptions,
+  rollupCutoffs?: RollupCutoffs,
 ): VersionBump[] {
   const packageByPath = new Map(packages.map((p) => [p.path, p]));
   const packageByName = new Map(packages.map((p) => [p.name, p]));
@@ -105,7 +121,24 @@ export function calculateVersionBumps(
     if (!direct && !isPropagated) continue;
 
     // Roll up commits from unpublished workspace deps into this package
-    const rolledUp = collectUnpublishedDepCommits(pkg.name, packageByName, directBumps, new Set());
+    const rolledUpRaw = collectUnpublishedDepCommits(
+      pkg.name,
+      packageByName,
+      directBumps,
+      new Set(),
+    );
+    // Deduplicate (same commit via multiple deps) and apply per-consumer cutoff
+    const cutoff = rollupCutoffs?.packageCutoffs.get(pkg.path);
+    const seenHashes = new Set<string>();
+    const rolledUp = rolledUpRaw.filter((c) => {
+      if (seenHashes.has(c.hash)) return false;
+      seenHashes.add(c.hash);
+      if (cutoff !== undefined && rollupCutoffs) {
+        const ts = rollupCutoffs.commitTimestamps.get(c.hash);
+        if (ts !== undefined && ts <= cutoff) return false;
+      }
+      return true;
+    });
 
     let level: BumpLevel;
     let isResultPropagated: boolean;

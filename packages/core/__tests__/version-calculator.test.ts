@@ -309,6 +309,111 @@ describe("calculateVersionBumps", () => {
     expect(bumps[0].commits).toHaveLength(1);
   });
 
+  it("rollupCutoffs filters old commits from unpublished deps", () => {
+    const oldCommit = makeCommit({ hash: "old1", type: "feat", description: "old feature" });
+    const newCommit = makeCommit({ hash: "new1", type: "fix", description: "new fix" });
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(
+      packages,
+      [
+        { packagePath: "packages/core", commit: oldCommit },
+        { packagePath: "packages/core", commit: newCommit },
+      ],
+      undefined,
+      {
+        packageCutoffs: new Map([["packages/cli", 100]]), // cli tag at ts=100
+        commitTimestamps: new Map([
+          ["old1", 50], // before cli tag
+          ["new1", 200], // after cli tag
+        ]),
+      },
+    );
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].commits).toHaveLength(1);
+    expect(bumps[0].commits[0].hash).toBe("new1");
+    // Only fix commit remains -> patch
+    expect(bumps[0].level).toBe("patch");
+  });
+
+  it("rollupCutoffs includes all when no cutoff for package", () => {
+    const packages = [
+      makePackage({ name: "@myapp/core", path: "packages/core", publish: false }),
+      makePackage({
+        name: "@myapp/cli",
+        path: "packages/cli",
+        publish: true,
+        workspaceDeps: ["@myapp/core"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(
+      packages,
+      [
+        { packagePath: "packages/core", commit: makeCommit({ hash: "c1", type: "feat" }) },
+        { packagePath: "packages/core", commit: makeCommit({ hash: "c2", type: "fix" }) },
+      ],
+      undefined,
+      {
+        packageCutoffs: new Map(), // no cutoff for cli -> include all
+        commitTimestamps: new Map([
+          ["c1", 50],
+          ["c2", 200],
+        ]),
+      },
+    );
+    expect(bumps).toHaveLength(1);
+    expect(bumps[0].commits).toHaveLength(2);
+  });
+
+  it("rollupCutoffs per-consumer: different cutoffs for different consumers", () => {
+    const packages = [
+      makePackage({ name: "@myapp/utils", path: "packages/utils", publish: false }),
+      makePackage({
+        name: "@myapp/app-a",
+        path: "packages/app-a",
+        publish: true,
+        workspaceDeps: ["@myapp/utils"],
+      }),
+      makePackage({
+        name: "@myapp/app-b",
+        path: "packages/app-b",
+        publish: true,
+        workspaceDeps: ["@myapp/utils"],
+      }),
+    ];
+    const bumps = calculateVersionBumps(
+      packages,
+      [
+        { packagePath: "packages/utils", commit: makeCommit({ hash: "u1", type: "feat" }) },
+        { packagePath: "packages/utils", commit: makeCommit({ hash: "u2", type: "fix" }) },
+      ],
+      undefined,
+      {
+        packageCutoffs: new Map([
+          ["packages/app-a", 30], // app-a tagged earlier -> sees both commits
+          ["packages/app-b", 80], // app-b tagged later -> only sees u2
+        ]),
+        commitTimestamps: new Map([
+          ["u1", 50],
+          ["u2", 100],
+        ]),
+      },
+    );
+    const appA = bumps.find((b) => b.packageName === "@myapp/app-a")!;
+    const appB = bumps.find((b) => b.packageName === "@myapp/app-b")!;
+    expect(appA.commits).toHaveLength(2); // both u1 and u2
+    expect(appA.level).toBe("minor"); // feat wins
+    expect(appB.commits).toHaveLength(1); // only u2
+    expect(appB.level).toBe("patch"); // only fix
+  });
+
   it("direct bump over propagated", () => {
     const packages = [
       makePackage({ name: "@myapp/core", path: "packages/core", publish: true }),

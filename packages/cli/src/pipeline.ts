@@ -7,6 +7,7 @@ import {
   detectCircularDeps,
   type PrereleaseOptions,
   parseConventionalCommit,
+  type RollupCutoffs,
   resolveTagFormat,
   resolveTagPrefix,
   type VersionBump,
@@ -45,17 +46,21 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   const cycle = detectCircularDeps(packages);
   if (cycle) throw new Error(`Circular dependency detected: ${cycle.join(" -> ")}`);
 
-  // Collect per-package latest tags
+  // Collect per-package latest tags (only published packages have meaningful tags)
   const packageTags = new Map<string, string | null>();
   let earliestTag: string | null = null;
-  let hasPackageWithNoTag = false;
+  let hasPublishedPackageWithNoTag = false;
 
   for (const pkg of packages) {
+    if (!pkg.publish) {
+      packageTags.set(pkg.path, null);
+      continue;
+    }
     const prefix = resolveTagPrefix(tagFormat, pkg.name);
     const tag = await getLatestVersionTag(cwd, prefix);
     packageTags.set(pkg.path, tag);
     if (tag === null) {
-      hasPackageWithNoTag = true;
+      hasPublishedPackageWithNoTag = true;
     } else if (!earliestTag) {
       earliestTag = tag;
     } else {
@@ -65,7 +70,7 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     }
   }
 
-  const fromRef = hasPackageWithNoTag ? null : earliestTag;
+  const fromRef = hasPublishedPackageWithNoTag ? null : earliestTag;
   const rawCommits = await getCommits(cwd, fromRef, "HEAD");
   const allParsed: ConventionalCommit[] = [];
   const filesMap = new Map<string, string[]>();
@@ -98,7 +103,9 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   const packagePaths = packages.map((p) => p.path);
   const allPackageCommits = assignCommitsToPackages(allParsed, filesMap, packagePaths);
 
-  // Filter commits per-package: only include commits after each package's own tag
+  // Filter commits per-package: only include commits after each package's own tag.
+  // Unpublished packages have no tag and pass through all commits here;
+  // their rollup filtering is handled inside calculateVersionBumps via rollupCutoffs.
   const filteredPackageCommits = allPackageCommits.filter((pc) => {
     const tag = packageTags.get(pc.packagePath);
     if (!tag) return true;
@@ -108,6 +115,19 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     if (commitTs === undefined) return true;
     return commitTs > tagTs;
   });
+
+  // Build per-published-package cutoff timestamps for rollup filtering.
+  // Each published package uses its own tag timestamp to filter rolled-up
+  // commits from unpublished deps, so only new commits are included.
+  const packageCutoffs = new Map<string, number>();
+  for (const pkg of packages) {
+    if (!pkg.publish) continue;
+    const tag = packageTags.get(pkg.path);
+    if (!tag) continue;
+    const ts = tagTimestamps.get(tag);
+    if (ts !== undefined) packageCutoffs.set(pkg.path, ts);
+  }
+  const rollupCutoffs: RollupCutoffs = { packageCutoffs, commitTimestamps };
 
   let prereleaseOpts: PrereleaseOptions | undefined;
   if (preid) {
@@ -125,7 +145,12 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     prereleaseOpts = { preid, lastStableVersions };
   }
 
-  let bumps = calculateVersionBumps(packages, filteredPackageCommits, prereleaseOpts);
+  let bumps = calculateVersionBumps(
+    packages,
+    filteredPackageCommits,
+    prereleaseOpts,
+    rollupCutoffs,
+  );
 
   if (config?.groups) {
     bumps = applyVersionGroups(bumps, packages, config.groups);
