@@ -56,7 +56,8 @@ export async function discoverPackages(
     if (configEntry?.publish !== undefined) {
       publish = configEntry.publish;
     } else if (hasExplicitConfig) {
-      publish = false;
+      // Listed in config without explicit publish → true; unlisted → false
+      publish = configEntry !== undefined;
     } else {
       publish = !isPrivate;
     }

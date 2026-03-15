@@ -104,6 +104,36 @@ describe("discoverPackages", () => {
     expect(gamma?.publish).toBe(false);
   });
 
+  it("defaults listed package without explicit publish to true", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/cli"), {
+      name: "@scope/cli",
+      version: "1.0.0",
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      packages: {
+        "packages/cli": {}, // listed without publish -> true
+        // core is not listed     -> false
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    const cli = result.find((p) => p.name === "@scope/cli");
+    const core = result.find((p) => p.name === "@scope/core");
+
+    expect(cli?.publish).toBe(true);
+    expect(core?.publish).toBe(false);
+  });
+
   it("handles single-package project (no workspaces)", async () => {
     await createPackage(tempDir, {
       name: "my-app",
