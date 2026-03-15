@@ -3,6 +3,8 @@ export interface PackageConfig {
   publish: boolean;
   /** Path to the changelog file. Defaults to <packageDir>/CHANGELOG.md. */
   changelog: string;
+  /** Override the package name used in tags, changelogs, and commit messages. */
+  name: string;
 }
 
 export interface BranchConfig {
@@ -11,7 +13,7 @@ export interface BranchConfig {
 }
 
 export interface RawConfig {
-  packages?: Record<string, Partial<Pick<PackageConfig, "publish" | "changelog">>>;
+  packages?: Record<string, Partial<Pick<PackageConfig, "publish" | "changelog" | "name">>>;
   /** Branch-based release configuration. Maps branch names to release behavior. */
   branches?: Record<string, BranchConfig>;
   /**

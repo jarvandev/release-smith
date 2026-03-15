@@ -68,7 +68,7 @@ export async function discoverPackages(
     const workspaceDeps = collectWorkspaceDeps(pkg, allWorkspaceNames);
 
     resolved.push({
-      name: pkg.name ?? "unknown",
+      name: configEntry?.name ?? pkg.name ?? "unknown",
       path: relPath,
       publish,
       changelogPath,
@@ -83,7 +83,7 @@ export async function discoverPackages(
 
 function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<string>): string[] {
   const deps: string[] = [];
-  const sources = [pkg.dependencies, pkg.peerDependencies];
+  const sources = [pkg.dependencies, pkg.peerDependencies, pkg.devDependencies];
   for (const source of sources) {
     if (!source) continue;
     for (const name of Object.keys(source)) {

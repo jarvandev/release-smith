@@ -118,6 +118,49 @@ describe("discoverPackages", () => {
     expect(result[0].publish).toBe(true);
   });
 
+  it("overrides package name from config", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/cli"), {
+      name: "@scope/cli",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      packages: {
+        "packages/cli": { publish: true, name: "cli-node" },
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("cli-node");
+  });
+
+  it("uses package.json name when config name is not set", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      packages: {
+        "packages/core": { publish: true },
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    expect(result[0].name).toBe("@scope/core");
+  });
+
   it("includes peerDependencies in workspaceDeps", async () => {
     await createPackage(tempDir, {
       name: "my-monorepo",
