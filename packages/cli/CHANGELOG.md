@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1] - 2026-03-15
+
+### Bug Fixes
+
+- prevent duplicate blank lines in changelog insertion ([25efb95](https://github.com/jarvandev/release-smith/commit/25efb95ac5579f66e21f21ed585fd21fe2c49bbd))
+- default listed packages to publish:true when not explicitly set ([281f3dc](https://github.com/jarvandev/release-smith/commit/281f3dc433d11c6acdd8f94c51bfb0b401bc9c99))
 
 ## [0.5.0] - 2026-03-15
 
