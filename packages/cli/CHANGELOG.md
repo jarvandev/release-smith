@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0] - 2026-03-16
+
+### Features
+
+- add extraDeps config for explicit dependency relationships ([3eebf5c](https://github.com/jarvandev/release-smith/commit/3eebf5cf13c3ee1b312a4f5baa36d97145d83737))
+
+### Bug Fixes
+
+- read CLI version from package.json instead of hardcoded value ([55ba9e9](https://github.com/jarvandev/release-smith/commit/55ba9e94d0e34f4922eebc45ebe3b4059d96eda8))
+- insertChangelog handles CRLF and missing trailing newline ([c62805c](https://github.com/jarvandev/release-smith/commit/c62805cc00bd48399e5b221526de2616fd8692d3))
+- ignoreFiles patterns now match dotfiles ([362c59b](https://github.com/jarvandev/release-smith/commit/362c59b6847aeaf5636e8371785904bc4a4828a0))
+
 ## [0.6.0] - 2026-03-16
 
 ### Features
