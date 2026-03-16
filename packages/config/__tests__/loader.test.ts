@@ -99,5 +99,24 @@ describe("loadConfig", () => {
     expect(result?.tagFormat).toBeUndefined();
     expect(result?.groups).toBeUndefined();
     expect(result?.prLabels).toBeUndefined();
+    expect(result?.ignoreFiles).toBeUndefined();
+  });
+
+  it("loads global ignoreFiles", async () => {
+    const config = { ignoreFiles: ["**/__tests__/**", "**/*.md"] };
+    await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
+    const result = await loadConfig(tempDir);
+    expect(result?.ignoreFiles).toEqual(["**/__tests__/**", "**/*.md"]);
+  });
+
+  it("loads per-package ignoreFiles", async () => {
+    const config = {
+      packages: {
+        "packages/cli": { ignoreFiles: ["scripts/**", "**/*.test.*"] },
+      },
+    };
+    await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
+    const result = await loadConfig(tempDir);
+    expect(result?.packages?.["packages/cli"]?.ignoreFiles).toEqual(["scripts/**", "**/*.test.*"]);
   });
 });

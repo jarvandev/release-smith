@@ -39,6 +39,13 @@
                   "type": "string"
                 },
                 "description": "Glob patterns for files to ignore when assigning commits to this package."
+              },
+              "extraDeps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Extra workspace package names to treat as dependencies for propagation and rollup."
               }
             },
             "additionalProperties": false

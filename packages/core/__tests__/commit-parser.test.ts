@@ -332,4 +332,68 @@ describe("assignCommitsToPackages", () => {
     const result = assignCommitsToPackages([commit], filesMap, ["packages/api"], ignoreFilesMap);
     expect(result).toHaveLength(0);
   });
+
+  it("treats empty ignoreFiles array as no filtering", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "change",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: change",
+    };
+    const filesMap = new Map([["abc123", ["packages/core/__tests__/foo.test.ts"]]]);
+    const ignoreFilesMap = new Map([["packages/core", []]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"], ignoreFilesMap);
+    expect(result).toHaveLength(1);
+  });
+
+  it("matches relative paths with src/** pattern", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "change src",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: change src",
+    };
+    const filesMap = new Map([
+      ["abc123", ["packages/core/src/index.ts", "packages/core/package.json"]],
+    ]);
+    // src/** should ignore src/index.ts but NOT package.json
+    const ignoreFilesMap = new Map([["packages/core", ["src/**"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"], ignoreFilesMap);
+    expect(result).toHaveLength(1);
+    expect(result[0].packagePath).toBe("packages/core");
+  });
+
+  it("applies independent ignoreFiles per package", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "cross-package change",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: cross-package change",
+    };
+    const filesMap = new Map([
+      ["abc123", ["packages/core/__tests__/a.test.ts", "packages/cli/scripts/build.sh"]],
+    ]);
+    // core ignores tests, cli ignores scripts
+    const ignoreFilesMap = new Map([
+      ["packages/core", ["**/__tests__/**"]],
+      ["packages/cli", ["scripts/**"]],
+    ]);
+    const result = assignCommitsToPackages(
+      [commit],
+      filesMap,
+      ["packages/core", "packages/cli"],
+      ignoreFilesMap,
+    );
+    // Both packages should be filtered out since all files per-package are ignored
+    expect(result).toHaveLength(0);
+  });
 });

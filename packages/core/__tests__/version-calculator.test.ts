@@ -31,6 +31,7 @@ function makePackage(overrides: Partial<ResolvedPackage> = {}): ResolvedPackage 
     version: "1.0.0",
     isPrivate: false,
     workspaceDeps: [],
+    ignoreFiles: [],
     ...overrides,
   };
 }

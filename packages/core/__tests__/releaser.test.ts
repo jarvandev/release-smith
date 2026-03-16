@@ -2,7 +2,16 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCommitMessage, updatePackageVersion, updateWorkspaceDeps } from "../src/releaser";
+import type { ResolvedPackage } from "@release-smith/config";
+import { execGit } from "@release-smith/git";
+import {
+  applyReleaseChanges,
+  buildCommitMessage,
+  createReleaseTags,
+  updatePackageVersion,
+  updateWorkspaceDeps,
+} from "../src/releaser";
+import type { VersionBump } from "../src/types";
 
 describe("updatePackageVersion", () => {
   let tempDir: string;
@@ -165,5 +174,295 @@ describe("buildCommitMessage", () => {
       },
     ]);
     expect(msg).toBe("chore(release): @myapp/core@1.1.0-beta.0");
+  });
+});
+
+async function initGitRepo(dir: string) {
+  await execGit(["init"], dir);
+  await execGit(["config", "user.email", "test@test.com"], dir);
+  await execGit(["config", "user.name", "Test"], dir);
+}
+
+async function gitCommit(dir: string, message: string) {
+  await execGit(["add", "-A"], dir);
+  await execGit(["commit", "-m", message, "--allow-empty"], dir);
+}
+
+function makeBump(overrides: Partial<VersionBump> = {}): VersionBump {
+  return {
+    packagePath: "packages/core",
+    packageName: "@myapp/core",
+    currentVersion: "1.0.0",
+    newVersion: "1.1.0",
+    level: "minor",
+    commits: [
+      {
+        hash: "abc123",
+        type: "feat",
+        scope: null,
+        description: "add feature",
+        body: "",
+        breaking: false,
+        rawMessage: "feat: add feature",
+      },
+    ],
+    propagated: false,
+    ...overrides,
+  };
+}
+
+function makePackage(overrides: Partial<ResolvedPackage> = {}): ResolvedPackage {
+  return {
+    name: "@myapp/core",
+    path: "packages/core",
+    publish: true,
+    changelogPath: "",
+    version: "1.0.0",
+    isPrivate: false,
+    workspaceDeps: [],
+    ignoreFiles: [],
+    ...overrides,
+  };
+}
+
+describe("applyReleaseChanges", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-releaser-apply-"));
+    await initGitRepo(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("updates package.json version", async () => {
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const pkg = makePackage({ changelogPath: join(pkgDir, "CHANGELOG.md") });
+    const bump = makeBump();
+    const results = await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [pkg],
+      isMonorepo: true,
+    });
+
+    const content = JSON.parse(await readFile(join(pkgDir, "package.json"), "utf-8"));
+    expect(content.version).toBe("1.1.0");
+    expect(results).toHaveLength(1);
+    expect(results[0].version).toBe("1.1.0");
+  });
+
+  it("writes CHANGELOG.md", async () => {
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const changelogPath = join(pkgDir, "CHANGELOG.md");
+    const pkg = makePackage({ changelogPath });
+    const bump = makeBump();
+    await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [pkg],
+      isMonorepo: true,
+    });
+
+    const changelog = await readFile(changelogPath, "utf-8");
+    expect(changelog).toContain("## [1.1.0]");
+    expect(changelog).toContain("add feature");
+  });
+
+  it("updates workspace dependency versions", async () => {
+    const coreDir = join(tempDir, "packages/core");
+    const cliDir = join(tempDir, "packages/cli");
+    await mkdir(coreDir, { recursive: true });
+    await mkdir(cliDir, { recursive: true });
+    await writeFile(
+      join(coreDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await writeFile(
+      join(cliDir, "package.json"),
+      `${JSON.stringify(
+        { name: "@myapp/cli", version: "1.0.0", dependencies: { "@myapp/core": "workspace:*" } },
+        null,
+        2,
+      )}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const corePkg = makePackage({ changelogPath: join(coreDir, "CHANGELOG.md") });
+    const cliPkg = makePackage({
+      name: "@myapp/cli",
+      path: "packages/cli",
+      changelogPath: join(cliDir, "CHANGELOG.md"),
+      workspaceDeps: ["@myapp/core"],
+    });
+    const bump = makeBump();
+    await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [corePkg, cliPkg],
+      isMonorepo: true,
+    });
+
+    const cliContent = JSON.parse(await readFile(join(cliDir, "package.json"), "utf-8"));
+    expect(cliContent.dependencies["@myapp/core"]).toBe("workspace:^1.1.0");
+  });
+
+  it("handles multiple bumps", async () => {
+    const coreDir = join(tempDir, "packages/core");
+    const cliDir = join(tempDir, "packages/cli");
+    await mkdir(coreDir, { recursive: true });
+    await mkdir(cliDir, { recursive: true });
+    await writeFile(
+      join(coreDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await writeFile(
+      join(cliDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/cli", version: "2.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const corePkg = makePackage({ changelogPath: join(coreDir, "CHANGELOG.md") });
+    const cliPkg = makePackage({
+      name: "@myapp/cli",
+      path: "packages/cli",
+      version: "2.0.0",
+      changelogPath: join(cliDir, "CHANGELOG.md"),
+    });
+    const bumps = [
+      makeBump(),
+      makeBump({
+        packagePath: "packages/cli",
+        packageName: "@myapp/cli",
+        currentVersion: "2.0.0",
+        newVersion: "2.1.0",
+      }),
+    ];
+    const results = await applyReleaseChanges({
+      cwd: tempDir,
+      bumps,
+      packages: [corePkg, cliPkg],
+      isMonorepo: true,
+    });
+
+    expect(results).toHaveLength(2);
+    const coreContent = JSON.parse(await readFile(join(coreDir, "package.json"), "utf-8"));
+    const cliContent = JSON.parse(await readFile(join(cliDir, "package.json"), "utf-8"));
+    expect(coreContent.version).toBe("1.1.0");
+    expect(cliContent.version).toBe("2.1.0");
+  });
+
+  it("returns empty array for empty bumps", async () => {
+    const results = await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [],
+      packages: [],
+      isMonorepo: false,
+    });
+    expect(results).toEqual([]);
+  });
+
+  it("returns correct tag names", async () => {
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const pkg = makePackage({ changelogPath: join(pkgDir, "CHANGELOG.md") });
+    const bump = makeBump();
+    const results = await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [pkg],
+      isMonorepo: true,
+    });
+
+    expect(results[0].tagName).toBe("@myapp/core@1.1.0");
+  });
+});
+
+describe("createReleaseTags", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-releaser-tags-"));
+    await initGitRepo(tempDir);
+    await writeFile(join(tempDir, "dummy.txt"), "init");
+    await gitCommit(tempDir, "chore: init");
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("creates git tags for each release result", async () => {
+    const results = [
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0",
+        changelog: "",
+        tagName: "@myapp/core@1.1.0",
+      },
+    ];
+    await createReleaseTags(tempDir, results, false);
+
+    const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
+    expect(tags).toContain("@myapp/core@1.1.0");
+  });
+
+  it("creates multiple tags", async () => {
+    const results = [
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0",
+        changelog: "",
+        tagName: "@myapp/core@1.1.0",
+      },
+      {
+        packageName: "@myapp/cli",
+        packagePath: "packages/cli",
+        version: "2.0.0",
+        changelog: "",
+        tagName: "@myapp/cli@2.0.0",
+      },
+    ];
+    await createReleaseTags(tempDir, results, false);
+
+    const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
+    expect(tags).toContain("@myapp/core@1.1.0");
+    expect(tags).toContain("@myapp/cli@2.0.0");
+  });
+
+  it("works with custom tag format", async () => {
+    const results = [
+      {
+        packageName: "my-tool",
+        packagePath: ".",
+        version: "3.0.0",
+        changelog: "",
+        tagName: "v3.0.0",
+      },
+    ];
+    await createReleaseTags(tempDir, results, false);
+
+    const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
+    expect(tags).toContain("v3.0.0");
   });
 });
