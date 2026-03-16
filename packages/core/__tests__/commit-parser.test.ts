@@ -314,4 +314,22 @@ describe("assignCommitsToPackages", () => {
     const result = assignCommitsToPackages([commit], filesMap, ["packages/cli"], ignoreFilesMap);
     expect(result).toHaveLength(0);
   });
+
+  it("ignores dotfiles when pattern matches them", () => {
+    const commit = {
+      hash: "abc123",
+      type: "fix",
+      scope: null,
+      description: "update env",
+      body: "",
+      breaking: false,
+      rawMessage: "fix: update env",
+    };
+    const filesMap = new Map([
+      ["abc123", ["packages/api/.env.example", "packages/api/.gitignore"]],
+    ]);
+    const ignoreFilesMap = new Map([["packages/api", ["**/*"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/api"], ignoreFilesMap);
+    expect(result).toHaveLength(0);
+  });
 });

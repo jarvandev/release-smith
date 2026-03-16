@@ -33,7 +33,7 @@ export function assignCommitsToPackages(
   if (ignoreFilesMap) {
     for (const [pkgPath, patterns] of ignoreFilesMap) {
       if (patterns.length > 0) {
-        ignoreMatchers.set(pkgPath, picomatch(patterns));
+        ignoreMatchers.set(pkgPath, picomatch(patterns, { dot: true }));
       }
     }
   }
