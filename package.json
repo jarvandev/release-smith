@@ -15,11 +15,13 @@
     "format:check": "bunx biome format .",
     "check": "bun run typecheck && bun run lint && bun run test",
     "build": "bun --filter release-smith build",
-    "build:compile": "bun --filter release-smith build:compile"
+    "build:compile": "bun --filter release-smith build:compile",
+    "generate:schema": "bun run scripts/generate-schema.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
     "bun-types": "^1.3.10",
+    "ts-json-schema-generator": "^2.9.0",
     "typescript": "^5.9.3"
   }
 }

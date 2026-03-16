@@ -1,4 +1,5 @@
 {
+  "$schema": "./packages/config/src/schema.json",
   "packages": {
     "packages/config": { "publish": false },
     "packages/git": { "publish": false },

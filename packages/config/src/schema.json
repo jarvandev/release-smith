@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/RawConfig",
+  "definitions": {
+    "RawConfig": {
+      "type": "object",
+      "properties": {
+        "ignoreFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns for files to ignore when assigning commits to packages (applied globally)."
+        },
+        "packages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "publish": {
+                "type": "boolean",
+                "description": "Whether this package should be published."
+              },
+              "changelog": {
+                "type": "string",
+                "description": "Path to the changelog file. Defaults to <packageDir>/CHANGELOG.md."
+              },
+              "name": {
+                "type": "string",
+                "description": "Override the package name used in tags, changelogs, and commit messages."
+              },
+              "from": {
+                "type": "string",
+                "description": "Starting commit hash. Only commits after this are considered for the first release."
+              },
+              "ignoreFiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Glob patterns for files to ignore when assigning commits to this package."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "branches": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/BranchConfig"
+          },
+          "description": "Branch-based release configuration. Maps branch names to release behavior."
+        },
+        "tagFormat": {
+          "type": "string",
+          "description": "Tag name format template. Supports `{version}` and `{name}` placeholders. Defaults: single package = `\"v{version}\"`, monorepo = `\"{name}@{version}\"`."
+        },
+        "groups": {
+          "$ref": "#/definitions/VersionGroups",
+          "description": "Version groups for monorepo version alignment."
+        },
+        "prLabels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Labels to add to Release PRs. Defaults to [\"autorelease: pending\"]."
+        },
+        "$schema": {
+          "type": "string",
+          "description": "Path or URL to the JSON Schema for editor validation."
+        }
+      },
+      "additionalProperties": false
+    },
+    "BranchConfig": {
+      "type": "object",
+      "properties": {
+        "prerelease": {
+          "type": "string",
+          "description": "Pre-release identifier (e.g., \"beta\", \"alpha\", \"rc\")."
+        }
+      },
+      "required": ["prerelease"],
+      "additionalProperties": false
+    },
+    "VersionGroups": {
+      "type": "object",
+      "properties": {
+        "fixed": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Fixed groups: all packages always share the same version."
+        },
+        "linked": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": "Linked groups: bumped packages share the highest version."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$id": "https://github.com/jarvandev/release-smith/raw/main/packages/config/src/schema.json",
+  "title": "Release Smith Configuration"
+}
