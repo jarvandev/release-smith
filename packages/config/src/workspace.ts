@@ -9,8 +9,11 @@ export async function discoverPackages(
 ): Promise<ResolvedPackage[]> {
   const rootPkg = await readPackageJson(cwd);
 
+  const globalIgnoreFiles = config?.ignoreFiles ?? [];
+
   // Single-package project
   if (!rootPkg.workspaces) {
+    const pkgIgnoreFiles = config?.packages?.["."]?.ignoreFiles ?? [];
     return [
       {
         name: rootPkg.name ?? "unknown",
@@ -20,6 +23,7 @@ export async function discoverPackages(
         version: rootPkg.version ?? "0.0.0",
         isPrivate: rootPkg.private === true,
         workspaceDeps: [],
+        ignoreFiles: [...globalIgnoreFiles, ...pkgIgnoreFiles],
       },
     ];
   }
@@ -68,6 +72,7 @@ export async function discoverPackages(
 
     const workspaceDeps = collectWorkspaceDeps(pkg, allWorkspaceNames);
 
+    const pkgIgnoreFiles = configEntry?.ignoreFiles ?? [];
     resolved.push({
       name: configEntry?.name ?? pkg.name ?? "unknown",
       path: relPath,
@@ -77,6 +82,7 @@ export async function discoverPackages(
       isPrivate,
       workspaceDeps,
       from: configEntry?.from,
+      ignoreFiles: [...globalIgnoreFiles, ...pkgIgnoreFiles],
     });
   }
 

@@ -17,9 +17,11 @@
     "@release-smith/config": "workspace:*",
     "@release-smith/git": "workspace:*",
     "@release-smith/github": "workspace:*",
+    "picomatch": "^4.0.3",
     "semver": "^7.7.4"
   },
   "devDependencies": {
+    "@types/picomatch": "^4.0.2",
     "@types/semver": "^7.7.1"
   },
   "scripts": {

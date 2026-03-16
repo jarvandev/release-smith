@@ -216,4 +216,102 @@ describe("assignCommitsToPackages", () => {
     const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
     expect(result).toHaveLength(0);
   });
+
+  it("skips package when all changed files match ignoreFiles", () => {
+    const commit = {
+      hash: "abc123",
+      type: "fix",
+      scope: null,
+      description: "correct assertion",
+      body: "",
+      breaking: false,
+      rawMessage: "fix: correct assertion",
+    };
+    const filesMap = new Map([["abc123", ["packages/core/__tests__/foo.test.ts"]]]);
+    const ignoreFilesMap = new Map([["packages/core", ["**/__tests__/**", "**/*.test.*"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"], ignoreFilesMap);
+    expect(result).toHaveLength(0);
+  });
+
+  it("assigns package when some files are not ignored", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "add feature with tests",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: add feature with tests",
+    };
+    const filesMap = new Map([
+      ["abc123", ["packages/core/src/index.ts", "packages/core/__tests__/index.test.ts"]],
+    ]);
+    const ignoreFilesMap = new Map([["packages/core", ["**/__tests__/**"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"], ignoreFilesMap);
+    expect(result).toHaveLength(1);
+    expect(result[0].packagePath).toBe("packages/core");
+  });
+
+  it("behaves normally when no ignoreFilesMap is provided", () => {
+    const commit = {
+      hash: "abc123",
+      type: "fix",
+      scope: null,
+      description: "fix test",
+      body: "",
+      breaking: false,
+      rawMessage: "fix: fix test",
+    };
+    const filesMap = new Map([["abc123", ["packages/core/__tests__/foo.test.ts"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"]);
+    expect(result).toHaveLength(1);
+  });
+
+  it("ignores files matching nested test directories", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "nested test",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: nested test",
+    };
+    const filesMap = new Map([["abc123", ["packages/core/src/__tests__/nested/deep.test.ts"]]]);
+    const ignoreFilesMap = new Map([["packages/core", ["**/__tests__/**"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/core"], ignoreFilesMap);
+    expect(result).toHaveLength(0);
+  });
+
+  it("handles ignoreFiles for root package (path='.')", () => {
+    const commit = {
+      hash: "abc123",
+      type: "feat",
+      scope: null,
+      description: "update docs",
+      body: "",
+      breaking: false,
+      rawMessage: "feat: update docs",
+    };
+    const filesMap = new Map([["abc123", ["README.md"]]]);
+    const ignoreFilesMap = new Map([[".", ["**/*.md"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["."], ignoreFilesMap);
+    expect(result).toHaveLength(0);
+  });
+
+  it("ignores files matching *.spec.* pattern", () => {
+    const commit = {
+      hash: "abc123",
+      type: "fix",
+      scope: null,
+      description: "fix spec",
+      body: "",
+      breaking: false,
+      rawMessage: "fix: fix spec",
+    };
+    const filesMap = new Map([["abc123", ["packages/cli/src/app.spec.ts"]]]);
+    const ignoreFilesMap = new Map([["packages/cli", ["**/*.spec.*"]]]);
+    const result = assignCommitsToPackages([commit], filesMap, ["packages/cli"], ignoreFilesMap);
+    expect(result).toHaveLength(0);
+  });
 });

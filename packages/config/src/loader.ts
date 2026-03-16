@@ -22,5 +22,6 @@ export async function loadConfig(cwd: string): Promise<RawConfig | null> {
     tagFormat: raw.tagFormat,
     groups: raw.groups,
     prLabels: raw.prLabels,
+    ignoreFiles: raw.ignoreFiles,
   };
 }

@@ -16,6 +16,7 @@ Lightweight release management tool for Node.js/Bun projects. Inspired by [relea
 - **Version groups** -- fixed (all same version) and linked (bumped packages share highest)
 - **Auto PR labels** -- configurable labels added to Release PRs
 - **Package name override** -- custom names for tags, changelogs, and commit messages
+- **`ignoreFiles`** -- glob patterns to exclude test/doc files from triggering releases
 - **`from` baseline** -- prevent new packages from including entire git history on first release
 - **GitHub Actions outputs** -- `releases_created`, per-package version/tag outputs for CI pipelines
 
@@ -89,7 +90,8 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
     "fixed": [["@myapp/core", "@myapp/cli"]],
     "linked": [["@myapp/ui", "@myapp/theme"]]
   },
-  "prLabels": ["autorelease: pending"]
+  "prLabels": ["autorelease: pending"],
+  "ignoreFiles": ["**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*.md"]
 }
 ```
 
@@ -102,6 +104,8 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 | `packages.*.name` | `string` | Override package name for tags/changelogs/commits (default: `package.json` name) |
 | `packages.*.from` | `string` | Starting commit hash. Only commits after this are considered for the first release |
 | `packages.*.changelog` | `string` | Custom changelog file path (default: `<packageDir>/CHANGELOG.md`) |
+| `packages.*.ignoreFiles` | `string[]` | Per-package glob patterns for files to ignore (merged with global, relative to package dir) |
+| `ignoreFiles` | `string[]` | Global glob patterns for files to ignore when assigning commits (relative to each package dir) |
 | `tagFormat` | `string` | Tag template with `{name}` and `{version}` placeholders. Must include `{version}` |
 | `branches` | `Record<string, BranchConfig>` | Map of branch name to pre-release config |
 | `branches.*.prerelease` | `string` | Pre-release identifier (e.g., `"beta"`, `"alpha"`, `"rc"`) |
@@ -128,7 +132,8 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 4. Collect commits      -- git log from last tag to HEAD
 5. Parse commits        -- extract type, scope, description, breaking flag
 6. Assign to packages   -- match changed file paths to package directories
-7. Filter by baseline   -- per-package tag timestamp or "from" config
+7. Apply ignoreFiles    -- skip commits whose matched files are all ignored
+8. Filter by baseline   -- per-package tag timestamp or "from" config
 8. Calculate bumps      -- highest bump level wins (major > minor > patch)
 9. Roll up              -- merge unpublished dep commits into parent
 10. Apply groups        -- enforce fixed/linked version constraints

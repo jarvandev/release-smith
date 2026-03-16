@@ -1,3 +1,4 @@
+import picomatch from "picomatch";
 import type { ConventionalCommit, PackageCommit } from "./types";
 
 const CONVENTIONAL_REGEX = /^(\w+)(?:\(([^)]+)\))?(!)?\s*:\s*(.+)$/;
@@ -25,21 +26,38 @@ export function assignCommitsToPackages(
   commits: ConventionalCommit[],
   filesMap: Map<string, string[]>,
   packagePaths: string[],
+  ignoreFilesMap?: Map<string, string[]>,
 ): PackageCommit[] {
+  // Pre-compile ignore matchers per package
+  const ignoreMatchers = new Map<string, picomatch.Matcher>();
+  if (ignoreFilesMap) {
+    for (const [pkgPath, patterns] of ignoreFilesMap) {
+      if (patterns.length > 0) {
+        ignoreMatchers.set(pkgPath, picomatch(patterns));
+      }
+    }
+  }
+
   const results: PackageCommit[] = [];
   for (const commit of commits) {
     const files = filesMap.get(commit.hash) ?? [];
-    const matchedPaths = new Set<string>();
+    // Collect per-package relative file paths in a single pass
+    const pkgFilesMap = new Map<string, string[]>();
     for (const file of files) {
       for (const pkgPath of packagePaths) {
-        if (pkgPath === ".") {
-          matchedPaths.add(pkgPath);
-        } else if (file.startsWith(`${pkgPath}/`)) {
-          matchedPaths.add(pkgPath);
+        if (pkgPath === "." || file.startsWith(`${pkgPath}/`)) {
+          let list = pkgFilesMap.get(pkgPath);
+          if (!list) {
+            list = [];
+            pkgFilesMap.set(pkgPath, list);
+          }
+          list.push(pkgPath === "." ? file : file.slice(pkgPath.length + 1));
         }
       }
     }
-    for (const pkgPath of matchedPaths) {
+    for (const [pkgPath, pkgFiles] of pkgFilesMap) {
+      const isIgnored = ignoreMatchers.get(pkgPath);
+      if (isIgnored && !pkgFiles.some((f) => !isIgnored(f))) continue;
       results.push({ packagePath: pkgPath, commit });
     }
   }

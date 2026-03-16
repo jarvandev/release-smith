@@ -112,7 +112,18 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   }
 
   const packagePaths = packages.map((p) => p.path);
-  const allPackageCommits = assignCommitsToPackages(allParsed, filesMap, packagePaths);
+  const ignoreFilesMap = new Map<string, string[]>();
+  for (const pkg of packages) {
+    if (pkg.ignoreFiles.length > 0) {
+      ignoreFilesMap.set(pkg.path, pkg.ignoreFiles);
+    }
+  }
+  const allPackageCommits = assignCommitsToPackages(
+    allParsed,
+    filesMap,
+    packagePaths,
+    ignoreFilesMap,
+  );
 
   // Resolve per-package baseline timestamps (tag or "from" commit)
   const packageBaselineTs = new Map<string, number>();

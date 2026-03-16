@@ -7,6 +7,8 @@ export interface PackageConfig {
   name: string;
   /** Starting commit hash. Only commits after this are considered for the first release. */
   from: string;
+  /** Glob patterns for files to ignore when assigning commits to this package. */
+  ignoreFiles: string[];
 }
 
 export interface BranchConfig {
@@ -15,9 +17,11 @@ export interface BranchConfig {
 }
 
 export interface RawConfig {
+  /** Glob patterns for files to ignore when assigning commits to packages (applied globally). */
+  ignoreFiles?: string[];
   packages?: Record<
     string,
-    Partial<Pick<PackageConfig, "publish" | "changelog" | "name" | "from">>
+    Partial<Pick<PackageConfig, "publish" | "changelog" | "name" | "from" | "ignoreFiles">>
   >;
   /** Branch-based release configuration. Maps branch names to release behavior. */
   branches?: Record<string, BranchConfig>;
@@ -56,4 +60,6 @@ export interface ResolvedPackage {
   workspaceDeps: string[];
   /** Starting commit hash for first release (used when no tag exists) */
   from?: string;
+  /** Merged glob patterns (global + per-package) for ignoring files in commit assignment. */
+  ignoreFiles: string[];
 }

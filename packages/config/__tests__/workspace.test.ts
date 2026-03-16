@@ -245,4 +245,85 @@ describe("discoverPackages", () => {
     expect(app?.workspaceDeps).toContain("@scope/utils");
     expect(app?.workspaceDeps.filter((d) => d === "@scope/utils")).toHaveLength(1);
   });
+
+  it("merges global ignoreFiles into every package", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/alpha"), {
+      name: "@scope/alpha",
+      version: "1.0.0",
+    });
+    await createPackage(join(tempDir, "packages/beta"), {
+      name: "@scope/beta",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      ignoreFiles: ["**/__tests__/**", "**/*.md"],
+      packages: {
+        "packages/alpha": {},
+        "packages/beta": {},
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    for (const pkg of result) {
+      expect(pkg.ignoreFiles).toEqual(["**/__tests__/**", "**/*.md"]);
+    }
+  });
+
+  it("appends per-package ignoreFiles to global", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/cli"), {
+      name: "@scope/cli",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      ignoreFiles: ["**/*.md"],
+      packages: {
+        "packages/cli": { ignoreFiles: ["scripts/**"] },
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    const cli = result.find((p) => p.name === "@scope/cli");
+    expect(cli?.ignoreFiles).toEqual(["**/*.md", "scripts/**"]);
+  });
+
+  it("defaults ignoreFiles to empty array when not configured", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+
+    const result = await discoverPackages(tempDir, null);
+    expect(result[0].ignoreFiles).toEqual([]);
+  });
+
+  it("applies global ignoreFiles to single-package project", async () => {
+    await createPackage(tempDir, {
+      name: "my-app",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      ignoreFiles: ["**/*.test.*"],
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    expect(result[0].ignoreFiles).toEqual(["**/*.test.*"]);
+  });
 });
