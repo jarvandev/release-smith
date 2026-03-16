@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { defineCommand, runMain } from "citty";
+import { version } from "../package.json";
 
 const main = defineCommand({
   meta: {
     name: "release-smith",
-    version: "0.1.0",
+    version,
     description: "Lightweight release management for Node.js/Bun",
   },
   subCommands: {
