@@ -5,6 +5,14 @@
     "packages/git": { "publish": false },
     "packages/github": { "publish": false },
     "packages/core": { "publish": false },
-    "packages/cli": { "publish": true }
+    "packages/cli": {
+      "publish": true,
+      "extraDeps": [
+        "@release-smith/config",
+        "@release-smith/core",
+        "@release-smith/git",
+        "@release-smith/github"
+      ]
+    }
   }
 }
