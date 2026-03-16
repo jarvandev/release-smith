@@ -70,7 +70,9 @@ export async function discoverPackages(
       ? join(cwd, configEntry.changelog)
       : join(dir, "CHANGELOG.md");
 
-    const workspaceDeps = collectWorkspaceDeps(pkg, allWorkspaceNames);
+    const autoDetected = collectWorkspaceDeps(pkg, allWorkspaceNames);
+    const extra = configEntry?.extraDeps ?? [];
+    const workspaceDeps = [...new Set([...autoDetected, ...extra])];
 
     const pkgIgnoreFiles = configEntry?.ignoreFiles ?? [];
     resolved.push({
@@ -90,17 +92,14 @@ export async function discoverPackages(
 }
 
 function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<string>): string[] {
-  const deps: string[] = [];
-  const sources = [pkg.dependencies, pkg.peerDependencies, pkg.devDependencies];
-  for (const source of sources) {
+  const deps = new Set<string>();
+  for (const source of [pkg.dependencies, pkg.peerDependencies]) {
     if (!source) continue;
     for (const name of Object.keys(source)) {
-      if (workspaceNames.has(name)) {
-        deps.push(name);
-      }
+      if (workspaceNames.has(name)) deps.add(name);
     }
   }
-  return [...new Set(deps)];
+  return [...deps];
 }
 
 async function resolveWorkspaceGlobs(cwd: string, patterns: string[]): Promise<string[]> {

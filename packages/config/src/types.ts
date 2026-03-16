@@ -9,6 +9,8 @@ export interface PackageConfig {
   from: string;
   /** Glob patterns for files to ignore when assigning commits to this package. */
   ignoreFiles: string[];
+  /** Extra workspace package names to treat as dependencies for propagation and rollup. */
+  extraDeps: string[];
 }
 
 export interface BranchConfig {
@@ -21,7 +23,9 @@ export interface RawConfig {
   ignoreFiles?: string[];
   packages?: Record<
     string,
-    Partial<Pick<PackageConfig, "publish" | "changelog" | "name" | "from" | "ignoreFiles">>
+    Partial<
+      Pick<PackageConfig, "publish" | "changelog" | "name" | "from" | "ignoreFiles" | "extraDeps">
+    >
   >;
   /** Branch-based release configuration. Maps branch names to release behavior. */
   branches?: Record<string, BranchConfig>;

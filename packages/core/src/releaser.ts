@@ -23,7 +23,7 @@ export async function updateWorkspaceDeps(
   const raw = await readFile(pkgPath, "utf-8");
   const pkg = JSON.parse(raw);
   let changed = false;
-  for (const field of ["dependencies", "peerDependencies"] as const) {
+  for (const field of ["dependencies", "peerDependencies", "devDependencies"] as const) {
     const deps = pkg[field];
     if (!deps) continue;
     for (const [name, version] of versionMap) {

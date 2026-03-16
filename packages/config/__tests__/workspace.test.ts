@@ -217,33 +217,90 @@ describe("discoverPackages", () => {
     expect(plugin?.workspaceDeps).not.toContain("some-external-lib");
   });
 
-  it("excludes devDependencies from workspaceDeps", async () => {
+  it("excludes devDependencies from auto-detected workspaceDeps", async () => {
     await createPackage(tempDir, {
       name: "my-monorepo",
       private: true,
       workspaces: ["packages/*"],
     });
-    await createPackage(join(tempDir, "packages/utils"), {
-      name: "@scope/utils",
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
       version: "1.0.0",
     });
-    await createPackage(join(tempDir, "packages/app"), {
-      name: "@scope/app",
+    await createPackage(join(tempDir, "packages/cli"), {
+      name: "@scope/cli",
       version: "1.0.0",
-      dependencies: {
-        "@scope/utils": "workspace:*",
-      },
       devDependencies: {
-        "@scope/utils": "workspace:*",
+        "@scope/core": "workspace:*",
       },
     });
 
     const result = await discoverPackages(tempDir, null);
-    const app = result.find((p) => p.name === "@scope/app");
+    const cli = result.find((p) => p.name === "@scope/cli");
 
-    // Should appear exactly once (not duplicated from devDeps)
-    expect(app?.workspaceDeps).toContain("@scope/utils");
-    expect(app?.workspaceDeps.filter((d) => d === "@scope/utils")).toHaveLength(1);
+    expect(cli?.workspaceDeps).not.toContain("@scope/core");
+  });
+
+  it("merges extraDeps into workspaceDeps", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+    await createPackage(join(tempDir, "packages/cli"), {
+      name: "@scope/cli",
+      version: "1.0.0",
+      devDependencies: {
+        "@scope/core": "workspace:*",
+      },
+    });
+
+    const config: RawConfig = {
+      packages: {
+        "packages/cli": { extraDeps: ["@scope/core"] },
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    const cli = result.find((p) => p.name === "@scope/cli");
+
+    // extraDeps brings it into workspaceDeps
+    expect(cli?.workspaceDeps).toContain("@scope/core");
+  });
+
+  it("deduplicates extraDeps with auto-detected deps", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+    await createPackage(join(tempDir, "packages/cli"), {
+      name: "@scope/cli",
+      version: "1.0.0",
+      dependencies: {
+        "@scope/core": "workspace:*",
+      },
+    });
+
+    const config: RawConfig = {
+      packages: {
+        "packages/cli": { extraDeps: ["@scope/core"] },
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    const cli = result.find((p) => p.name === "@scope/cli");
+
+    expect(cli?.workspaceDeps).toContain("@scope/core");
+    expect(cli?.workspaceDeps.filter((d) => d === "@scope/core")).toHaveLength(1);
   });
 
   it("merges global ignoreFiles into every package", async () => {
