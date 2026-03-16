@@ -134,10 +134,10 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 6. Assign to packages   -- match changed file paths to package directories
 7. Apply ignoreFiles    -- skip commits whose matched files are all ignored
 8. Filter by baseline   -- per-package tag timestamp or "from" config
-8. Calculate bumps      -- highest bump level wins (major > minor > patch)
-9. Roll up              -- merge unpublished dep commits into parent
-10. Apply groups        -- enforce fixed/linked version constraints
-11. Generate output     -- changelog, version bump, tag name
+9. Calculate bumps      -- highest bump level wins (major > minor > patch)
+10. Roll up             -- merge unpublished dep commits into parent
+11. Apply groups        -- enforce fixed/linked version constraints
+12. Generate output     -- changelog, version bump, tag name
 ```
 
 ### Version Bump Rules

@@ -243,4 +243,23 @@ describe("insertChangelog", () => {
     expect(result).toContain("# Changelog");
     expect(result).toContain("## [1.0.0]");
   });
+
+  it("normalizes CRLF line endings to LF", () => {
+    const existing = "# Changelog\r\n\r\n## [0.1.0] - 2026-03-01\r\n\r\n- initial\r\n";
+    const newEntry = "## [0.2.0] - 2026-03-14\n\n- fix bug";
+    const result = insertChangelog(existing, newEntry);
+    expect(result).not.toContain("\r\n");
+    expect(result).toContain("## [0.2.0]");
+    expect(result).toContain("## [0.1.0]");
+  });
+
+  it("handles header without trailing newline", () => {
+    const existing = "# Changelog";
+    const newEntry = "## [1.0.0] - 2026-03-14\n\n- release";
+    const result = insertChangelog(existing, newEntry);
+    // Should not produce duplicate "# Changelog" headers
+    const count = result.split("# Changelog").length - 1;
+    expect(count).toBe(1);
+    expect(result).toContain("## [1.0.0]");
+  });
 });
