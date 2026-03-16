@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0] - 2026-03-16
+
+### Features
+
+- add ignoreFiles config to filter files from triggering releases ([1ea61e7](https://github.com/jarvandev/release-smith/commit/1ea61e7515cd132acf07b54c37bab8a61d1fe241))
+- add JSON Schema for release-smith.json config ([4957cf0](https://github.com/jarvandev/release-smith/commit/4957cf0447ffa91c386d25b872e6c7ad78373af0))
+
 ## [0.5.1] - 2026-03-15
 
 ### Bug Fixes
