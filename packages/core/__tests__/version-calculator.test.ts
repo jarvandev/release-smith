@@ -435,6 +435,595 @@ describe("calculateVersionBumps", () => {
   });
 });
 
+describe("complex dependency graphs", () => {
+  describe("deep chains (3+ levels)", () => {
+    it("propagates patch through 3-level published chain", () => {
+      // D(pub) -> C(pub) -> B(pub) -> A(pub)
+      const packages = [
+        makePackage({ name: "d", path: "d", publish: true }),
+        makePackage({ name: "c", path: "c", publish: true, workspaceDeps: ["d"] }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["c"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "d", commit: makeCommit({ type: "feat" }) },
+      ]);
+      const d = bumps.find((b) => b.packageName === "d")!;
+      const c = bumps.find((b) => b.packageName === "c")!;
+      const b = bumps.find((b) => b.packageName === "b")!;
+      const a = bumps.find((b) => b.packageName === "a")!;
+      expect(d.newVersion).toBe("1.1.0");
+      expect(d.propagated).toBe(false);
+      // All dependents get propagated patch
+      expect(c.newVersion).toBe("1.0.1");
+      expect(c.propagated).toBe(true);
+      expect(b.newVersion).toBe("1.0.1");
+      expect(b.propagated).toBe(true);
+      expect(a.newVersion).toBe("1.0.1");
+      expect(a.propagated).toBe(true);
+    });
+
+    it("rolls up through 4-level unpublished chain", () => {
+      // utils(unpub) -> helpers(unpub) -> core(unpub) -> cli(pub)
+      const packages = [
+        makePackage({ name: "utils", path: "utils", publish: false }),
+        makePackage({ name: "helpers", path: "helpers", publish: false, workspaceDeps: ["utils"] }),
+        makePackage({ name: "core", path: "core", publish: false, workspaceDeps: ["helpers"] }),
+        makePackage({ name: "cli", path: "cli", publish: true, workspaceDeps: ["core"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "utils", commit: makeCommit({ type: "feat", description: "deep util" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("cli");
+      expect(bumps[0].newVersion).toBe("1.1.0"); // feat preserved through rollup
+      expect(bumps[0].commits).toHaveLength(1);
+      expect(bumps[0].commits[0].description).toBe("deep util");
+    });
+
+    it("rolls up commits from multiple levels of unpublished deps", () => {
+      // utils(unpub) -> core(unpub) -> cli(pub)
+      // both utils and core have commits
+      const packages = [
+        makePackage({ name: "utils", path: "utils", publish: false }),
+        makePackage({ name: "core", path: "core", publish: false, workspaceDeps: ["utils"] }),
+        makePackage({ name: "cli", path: "cli", publish: true, workspaceDeps: ["core"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "utils", commit: makeCommit({ hash: "u1", type: "fix" }) },
+        { packagePath: "core", commit: makeCommit({ hash: "c1", type: "feat" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("cli");
+      expect(bumps[0].newVersion).toBe("1.1.0"); // feat wins
+      expect(bumps[0].commits).toHaveLength(2);
+    });
+
+    it("published boundary stops rollup in mixed chain", () => {
+      // D(unpub) -> C(pub) -> B(unpub) -> A(pub)
+      // feat in D should roll up to C, NOT to A
+      const packages = [
+        makePackage({ name: "d", path: "d", publish: false }),
+        makePackage({ name: "c", path: "c", publish: true, workspaceDeps: ["d"] }),
+        makePackage({ name: "b", path: "b", publish: false, workspaceDeps: ["c"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "d", commit: makeCommit({ type: "feat", description: "deep change" }) },
+      ]);
+      const c = bumps.find((b) => b.packageName === "c")!;
+      const a = bumps.find((b) => b.packageName === "a")!;
+      // C gets D's commits via rollup -> minor
+      expect(c.newVersion).toBe("1.1.0");
+      expect(c.commits).toHaveLength(1);
+      expect(c.commits[0].description).toBe("deep change");
+      // A gets propagated patch (B is unpub with no commits, B's dep C is pub -> skip in rollup)
+      expect(a.newVersion).toBe("1.0.1");
+      expect(a.propagated).toBe(true);
+      expect(a.commits).toHaveLength(0);
+    });
+  });
+
+  describe("diamond dependencies", () => {
+    it("propagates correctly in diamond (all published)", () => {
+      //     D (feat)
+      //    / \
+      //   B   C
+      //    \ /
+      //     A
+      const packages = [
+        makePackage({ name: "d", path: "d", publish: true }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["d"] }),
+        makePackage({ name: "c", path: "c", publish: true, workspaceDeps: ["d"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b", "c"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "d", commit: makeCommit({ type: "feat" }) },
+      ]);
+      expect(bumps).toHaveLength(4);
+      const d = bumps.find((b) => b.packageName === "d")!;
+      const b = bumps.find((b) => b.packageName === "b")!;
+      const c = bumps.find((b) => b.packageName === "c")!;
+      const a = bumps.find((b) => b.packageName === "a")!;
+      expect(d.newVersion).toBe("1.1.0");
+      expect(b.propagated).toBe(true);
+      expect(c.propagated).toBe(true);
+      expect(a.propagated).toBe(true);
+      // A only gets one patch, not double-propagated
+      expect(a.newVersion).toBe("1.0.1");
+    });
+
+    it("rolls up through diamond (all unpublished)", () => {
+      //     D (feat, unpub)
+      //    / \
+      //   B   C  (both unpub)
+      //    \ /
+      //     A  (pub)
+      const packages = [
+        makePackage({ name: "d", path: "d", publish: false }),
+        makePackage({ name: "b", path: "b", publish: false, workspaceDeps: ["d"] }),
+        makePackage({ name: "c", path: "c", publish: false, workspaceDeps: ["d"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b", "c"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "d", commit: makeCommit({ hash: "d1", type: "feat" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("a");
+      expect(bumps[0].newVersion).toBe("1.1.0"); // feat from D
+      // D's commit collected via B path; C path skips D (already visited)
+      // -> deduplicated to 1 commit
+      expect(bumps[0].commits).toHaveLength(1);
+    });
+
+    it("rolls up through diamond with commits at multiple levels", () => {
+      //     D (feat, unpub)
+      //    / \
+      //   B   C  (both unpub, B has fix)
+      //    \ /
+      //     A  (pub)
+      const packages = [
+        makePackage({ name: "d", path: "d", publish: false }),
+        makePackage({ name: "b", path: "b", publish: false, workspaceDeps: ["d"] }),
+        makePackage({ name: "c", path: "c", publish: false, workspaceDeps: ["d"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b", "c"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "d", commit: makeCommit({ hash: "d1", type: "feat" }) },
+        { packagePath: "b", commit: makeCommit({ hash: "b1", type: "fix" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("a");
+      expect(bumps[0].newVersion).toBe("1.1.0"); // feat wins
+      expect(bumps[0].commits).toHaveLength(2); // D's feat + B's fix
+    });
+
+    it("handles diamond mixed pub/unpub", () => {
+      //     D (feat, unpub)
+      //    / \
+      //   B   C  (both pub)
+      //    \ /
+      //     A  (pub)
+      const packages = [
+        makePackage({ name: "d", path: "d", publish: false }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["d"] }),
+        makePackage({ name: "c", path: "c", publish: true, workspaceDeps: ["d"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b", "c"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "d", commit: makeCommit({ type: "feat" }) },
+      ]);
+      // D is unpub -> rolls up to B and C (both pub)
+      const b = bumps.find((b) => b.packageName === "b")!;
+      const c = bumps.find((b) => b.packageName === "c")!;
+      const a = bumps.find((b) => b.packageName === "a")!;
+      expect(b.newVersion).toBe("1.1.0"); // feat from rollup
+      expect(c.newVersion).toBe("1.1.0"); // feat from rollup
+      // A is propagated from B and C (published deps bumped)
+      expect(a.newVersion).toBe("1.0.1");
+      expect(a.propagated).toBe(true);
+    });
+
+    it("multiple published consumers share unpublished diamond bottom", () => {
+      //     shared (feat, unpub)
+      //    / \
+      //   X   Y  (both pub, independent)
+      const packages = [
+        makePackage({ name: "shared", path: "shared", publish: false }),
+        makePackage({ name: "x", path: "x", publish: true, workspaceDeps: ["shared"] }),
+        makePackage({ name: "y", path: "y", publish: true, workspaceDeps: ["shared"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "shared", commit: makeCommit({ hash: "s1", type: "feat" }) },
+      ]);
+      const x = bumps.find((b) => b.packageName === "x")!;
+      const y = bumps.find((b) => b.packageName === "y")!;
+      // Both get the same rollup
+      expect(x.newVersion).toBe("1.1.0");
+      expect(y.newVersion).toBe("1.1.0");
+      expect(x.commits).toHaveLength(1);
+      expect(y.commits).toHaveLength(1);
+    });
+  });
+
+  describe("circular dependencies", () => {
+    it("propagation handles 2-node cycle without infinite loop", () => {
+      // A(pub) <-> B(pub), feat in A
+      const packages = [
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b"] }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["a"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a", commit: makeCommit({ type: "feat" }) },
+      ]);
+      const a = bumps.find((b) => b.packageName === "a")!;
+      const b = bumps.find((b) => b.packageName === "b")!;
+      expect(a.newVersion).toBe("1.1.0"); // direct feat
+      expect(b.newVersion).toBe("1.0.1"); // propagated
+      expect(b.propagated).toBe(true);
+    });
+
+    it("propagation handles 3-node cycle without infinite loop", () => {
+      // A -> B -> C -> A, feat in A
+      const packages = [
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["c"] }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["a"] }),
+        makePackage({ name: "c", path: "c", publish: true, workspaceDeps: ["b"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a", commit: makeCommit({ type: "feat" }) },
+      ]);
+      expect(bumps).toHaveLength(3);
+      const a = bumps.find((b) => b.packageName === "a")!;
+      const b = bumps.find((b) => b.packageName === "b")!;
+      const c = bumps.find((b) => b.packageName === "c")!;
+      expect(a.newVersion).toBe("1.1.0"); // direct
+      expect(b.propagated).toBe(true);
+      expect(c.propagated).toBe(true);
+    });
+
+    it("rollup handles circular unpublished deps without infinite loop", () => {
+      // app(pub) -> x(unpub) -> y(unpub) -> x (circular)
+      const packages = [
+        makePackage({ name: "x", path: "x", publish: false, workspaceDeps: ["y"] }),
+        makePackage({ name: "y", path: "y", publish: false, workspaceDeps: ["x"] }),
+        makePackage({ name: "app", path: "app", publish: true, workspaceDeps: ["x"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "x", commit: makeCommit({ hash: "x1", type: "feat" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("app");
+      expect(bumps[0].newVersion).toBe("1.1.0");
+      // x's commit collected, y has no commit, circular ref doesn't cause infinite loop
+      expect(bumps[0].commits).toHaveLength(1);
+    });
+
+    it("rollup handles circular unpublished deps with commits on both", () => {
+      // app(pub) -> x(unpub) <-> y(unpub), both have commits
+      const packages = [
+        makePackage({ name: "x", path: "x", publish: false, workspaceDeps: ["y"] }),
+        makePackage({ name: "y", path: "y", publish: false, workspaceDeps: ["x"] }),
+        makePackage({ name: "app", path: "app", publish: true, workspaceDeps: ["x"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "x", commit: makeCommit({ hash: "x1", type: "feat" }) },
+        { packagePath: "y", commit: makeCommit({ hash: "y1", type: "fix" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("app");
+      expect(bumps[0].newVersion).toBe("1.1.0"); // feat wins
+      // Both commits collected
+      expect(bumps[0].commits).toHaveLength(2);
+    });
+  });
+
+  describe("mixed scenarios", () => {
+    it("direct bump wins over propagation in deep chain", () => {
+      // A(pub) -> B(pub) -> C(pub), fix in A, feat in C
+      const packages = [
+        makePackage({ name: "c", path: "c", publish: true }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["c"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "c", commit: makeCommit({ type: "feat" }) },
+        { packagePath: "a", commit: makeCommit({ type: "fix" }) },
+      ]);
+      const a = bumps.find((b) => b.packageName === "a")!;
+      const b = bumps.find((b) => b.packageName === "b")!;
+      const c = bumps.find((b) => b.packageName === "c")!;
+      expect(c.newVersion).toBe("1.1.0"); // direct feat
+      expect(b.newVersion).toBe("1.0.1"); // propagated from C
+      expect(b.propagated).toBe(true);
+      // A has direct fix -> not propagated
+      expect(a.newVersion).toBe("1.0.1"); // fix
+      expect(a.propagated).toBe(false);
+    });
+
+    it("wide fan-out: all dependents get propagated", () => {
+      const packages = [
+        makePackage({ name: "hub", path: "hub", publish: true }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["hub"] }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["hub"] }),
+        makePackage({ name: "c", path: "c", publish: true, workspaceDeps: ["hub"] }),
+        makePackage({ name: "d", path: "d", publish: true, workspaceDeps: ["hub"] }),
+        makePackage({ name: "e", path: "e", publish: true, workspaceDeps: ["hub"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "hub", commit: makeCommit({ type: "feat" }) },
+      ]);
+      expect(bumps).toHaveLength(6);
+      const hub = bumps.find((b) => b.packageName === "hub")!;
+      expect(hub.newVersion).toBe("1.1.0");
+      for (const name of ["a", "b", "c", "d", "e"]) {
+        const dep = bumps.find((b) => b.packageName === name)!;
+        expect(dep.newVersion).toBe("1.0.1");
+        expect(dep.propagated).toBe(true);
+      }
+    });
+
+    it("wide fan-in: multiple unpublished deps roll up to single published", () => {
+      const packages = [
+        makePackage({ name: "a", path: "a", publish: false }),
+        makePackage({ name: "b", path: "b", publish: false }),
+        makePackage({ name: "c", path: "c", publish: false }),
+        makePackage({
+          name: "app",
+          path: "app",
+          publish: true,
+          workspaceDeps: ["a", "b", "c"],
+        }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a", commit: makeCommit({ hash: "a1", type: "feat" }) },
+        { packagePath: "b", commit: makeCommit({ hash: "b1", type: "fix" }) },
+        { packagePath: "c", commit: makeCommit({ hash: "c1", type: "fix" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("app");
+      expect(bumps[0].newVersion).toBe("1.1.0"); // feat wins
+      expect(bumps[0].commits).toHaveLength(3);
+    });
+
+    it("deep diamond with mixed commits at every level", () => {
+      //       E (fix, unpub)
+      //      / \
+      //     C   D (C: feat, D: no commit, both unpub)
+      //      \ /
+      //       B (fix, unpub)
+      //       |
+      //       A (pub)
+      const packages = [
+        makePackage({ name: "e", path: "e", publish: false }),
+        makePackage({ name: "c", path: "c", publish: false, workspaceDeps: ["e"] }),
+        makePackage({ name: "d", path: "d", publish: false, workspaceDeps: ["e"] }),
+        makePackage({ name: "b", path: "b", publish: false, workspaceDeps: ["c", "d"] }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "e", commit: makeCommit({ hash: "e1", type: "fix" }) },
+        { packagePath: "c", commit: makeCommit({ hash: "c1", type: "feat" }) },
+        { packagePath: "b", commit: makeCommit({ hash: "b1", type: "fix" }) },
+      ]);
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("a");
+      expect(bumps[0].newVersion).toBe("1.1.0"); // feat from C wins
+      // B's fix + C's feat + E's fix (collected via C; D path skips E as visited)
+      expect(bumps[0].commits).toHaveLength(3);
+    });
+
+    it("two published packages at different depths of unpublished chain", () => {
+      // utils(unpub) -> core(unpub) -> cli(pub) and web(pub)
+      // cli depends on core, web depends on utils directly
+      const packages = [
+        makePackage({ name: "utils", path: "utils", publish: false }),
+        makePackage({ name: "core", path: "core", publish: false, workspaceDeps: ["utils"] }),
+        makePackage({ name: "cli", path: "cli", publish: true, workspaceDeps: ["core"] }),
+        makePackage({ name: "web", path: "web", publish: true, workspaceDeps: ["utils"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "utils", commit: makeCommit({ hash: "u1", type: "feat" }) },
+      ]);
+      const cli = bumps.find((b) => b.packageName === "cli")!;
+      const web = bumps.find((b) => b.packageName === "web")!;
+      // Both get utils' commit via rollup
+      expect(cli.newVersion).toBe("1.1.0");
+      expect(cli.commits).toHaveLength(1);
+      expect(web.newVersion).toBe("1.1.0");
+      expect(web.commits).toHaveLength(1);
+    });
+  });
+
+  describe("edge cases", () => {
+    it("propagation + rollup combined on same package", () => {
+      // A(pub) depends on B(unpub, has fix) and C(pub, has feat)
+      // A should get B's fix via rollup, and be propagated from C
+      // Rollup branch takes precedence when rolled-up commits exist
+      const packages = [
+        makePackage({ name: "b", path: "b", publish: false }),
+        makePackage({ name: "c", path: "c", publish: true }),
+        makePackage({
+          name: "a",
+          path: "a",
+          publish: true,
+          workspaceDeps: ["b", "c"],
+        }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "b", commit: makeCommit({ hash: "b1", type: "fix" }) },
+        { packagePath: "c", commit: makeCommit({ hash: "c1", type: "feat" }) },
+      ]);
+      const a = bumps.find((b) => b.packageName === "a")!;
+      const c = bumps.find((b) => b.packageName === "c")!;
+      expect(c.newVersion).toBe("1.1.0"); // direct feat
+      // A gets B's fix via rollup; C is published so not rolled up
+      expect(a.newVersion).toBe("1.0.1"); // only fix from rollup
+      expect(a.propagated).toBe(false); // has rolled-up commits
+      expect(a.commits).toHaveLength(1);
+      expect(a.commits[0].hash).toBe("b1");
+    });
+
+    it("chore-only commits on published package that is also propagated", () => {
+      // A(pub) depends on B(pub). B has feat.
+      // A has chore commit (no bump). A should still be propagated from B.
+      const packages = [
+        makePackage({ name: "b", path: "b", publish: true }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "b", commit: makeCommit({ type: "feat" }) },
+        { packagePath: "a", commit: makeCommit({ type: "chore" }) },
+      ]);
+      const a = bumps.find((b) => b.packageName === "a")!;
+      // chore does not create a direct bump, but propagation still applies
+      expect(a.newVersion).toBe("1.0.1");
+      expect(a.propagated).toBe(true);
+    });
+
+    it("orphaned unpublished package (no published consumer)", () => {
+      const packages = [
+        makePackage({ name: "orphan", path: "orphan", publish: false }),
+        makePackage({ name: "app", path: "app", publish: true }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "orphan", commit: makeCommit({ type: "feat" }) },
+      ]);
+      // No published package depends on orphan → 0 bumps
+      expect(bumps).toHaveLength(0);
+    });
+
+    it("all packages unpublished", () => {
+      const packages = [
+        makePackage({ name: "a", path: "a", publish: false }),
+        makePackage({ name: "b", path: "b", publish: false, workspaceDeps: ["a"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a", commit: makeCommit({ type: "feat" }) },
+      ]);
+      expect(bumps).toHaveLength(0);
+    });
+
+    it("empty packageCommits produces no bumps", () => {
+      const packages = [makePackage()];
+      const bumps = calculateVersionBumps(packages, []);
+      expect(bumps).toHaveLength(0);
+    });
+
+    it("rollupCutoffs boundary: commit at exact cutoff timestamp is filtered", () => {
+      const packages = [
+        makePackage({ name: "dep", path: "dep", publish: false }),
+        makePackage({
+          name: "app",
+          path: "app",
+          publish: true,
+          workspaceDeps: ["dep"],
+        }),
+      ];
+      const bumps = calculateVersionBumps(
+        packages,
+        [{ packagePath: "dep", commit: makeCommit({ hash: "d1", type: "feat" }) }],
+        undefined,
+        {
+          packageCutoffs: new Map([["app", 100]]),
+          commitTimestamps: new Map([["d1", 100]]), // equal to cutoff
+        },
+      );
+      // ts <= cutoff → filtered. No commits remain, no direct bump.
+      // But dep has a direct bump which triggers propagation of app.
+      // app is in propagatedPaths but has no rolled-up commits → propagated patch.
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("app");
+      expect(bumps[0].propagated).toBe(true);
+      expect(bumps[0].commits).toHaveLength(0);
+      expect(bumps[0].newVersion).toBe("1.0.1");
+    });
+
+    it("rollup all filtered by cutoff but package still propagated", () => {
+      // All unpublished dep commits are old (filtered), but the propagation
+      // from the unpublished dep's directBump still marks this package.
+      const packages = [
+        makePackage({ name: "lib", path: "lib", publish: false }),
+        makePackage({
+          name: "app",
+          path: "app",
+          publish: true,
+          workspaceDeps: ["lib"],
+        }),
+      ];
+      const bumps = calculateVersionBumps(
+        packages,
+        [
+          { packagePath: "lib", commit: makeCommit({ hash: "l1", type: "feat" }) },
+          { packagePath: "lib", commit: makeCommit({ hash: "l2", type: "fix" }) },
+        ],
+        undefined,
+        {
+          packageCutoffs: new Map([["app", 200]]),
+          commitTimestamps: new Map([
+            ["l1", 50],
+            ["l2", 100],
+          ]),
+        },
+      );
+      expect(bumps).toHaveLength(1);
+      expect(bumps[0].packageName).toBe("app");
+      // All rolled-up commits filtered → propagated patch
+      expect(bumps[0].propagated).toBe(true);
+      expect(bumps[0].commits).toHaveLength(0);
+      expect(bumps[0].newVersion).toBe("1.0.1");
+    });
+
+    it("multiple disconnected subgraphs: only affected subgraph bumps", () => {
+      // Subgraph 1: a(pub) -> b(pub)
+      // Subgraph 2: x(pub) -> y(pub)
+      // Only b has a commit.
+      const packages = [
+        makePackage({ name: "b", path: "b", publish: true }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["b"] }),
+        makePackage({ name: "y", path: "y", publish: true }),
+        makePackage({ name: "x", path: "x", publish: true, workspaceDeps: ["y"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "b", commit: makeCommit({ type: "fix" }) },
+      ]);
+      // Only b (direct) and a (propagated) should bump
+      expect(bumps).toHaveLength(2);
+      expect(bumps.find((b) => b.packageName === "b")).toBeDefined();
+      expect(bumps.find((b) => b.packageName === "a")).toBeDefined();
+      // x and y should not be bumped
+      expect(bumps.find((b) => b.packageName === "x")).toBeUndefined();
+      expect(bumps.find((b) => b.packageName === "y")).toBeUndefined();
+    });
+
+    it("breaking change from published dep propagates as patch (not major)", () => {
+      const packages = [
+        makePackage({ name: "lib", path: "lib", publish: true }),
+        makePackage({ name: "app", path: "app", publish: true, workspaceDeps: ["lib"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "lib", commit: makeCommit({ type: "feat", breaking: true }) },
+      ]);
+      const lib = bumps.find((b) => b.packageName === "lib")!;
+      const app = bumps.find((b) => b.packageName === "app")!;
+      expect(lib.newVersion).toBe("2.0.0");
+      expect(lib.level).toBe("major");
+      // Published dep propagation is always patch, regardless of dep's bump level
+      expect(app.newVersion).toBe("1.0.1");
+      expect(app.level).toBe("patch");
+      expect(app.propagated).toBe(true);
+    });
+
+    it("0.x version: major breaking goes to 1.0.0", () => {
+      const packages = [makePackage({ version: "0.5.3" })];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "packages/core", commit: makeCommit({ type: "feat", breaking: true }) },
+      ]);
+      expect(bumps[0].newVersion).toBe("1.0.0");
+    });
+  });
+});
+
 describe("bumpPrerelease", () => {
   it("starts new prerelease from stable version", () => {
     expect(bumpPrerelease("1.0.0", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.0");
@@ -482,6 +1071,14 @@ describe("bumpPrerelease", () => {
     // current=2.0.0 (stable), lastStable=1.0.0, level=minor
     // targetStable = 1.1.0; current is stable, no prerelease -> new sequence
     expect(bumpPrerelease("2.0.0", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.0");
+  });
+
+  it("0.x breaking prerelease goes to 1.0.0-beta.0", () => {
+    expect(bumpPrerelease("0.5.3", "0.5.3", "major", "beta")).toBe("1.0.0-beta.0");
+  });
+
+  it("0.x minor prerelease", () => {
+    expect(bumpPrerelease("0.5.3", "0.5.3", "minor", "beta")).toBe("0.6.0-beta.0");
   });
 
   it("handles prerelease with different preid and same base", () => {
@@ -663,23 +1260,29 @@ describe("applyVersionGroups", () => {
         makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
         makePackage({ name: "@a/cli", path: "a/cli", version: "1.0.0" }),
       ];
+      const prereleaseOpts = {
+        preid: "beta",
+        lastStableVersions: new Map([
+          ["a/core", "1.0.0"],
+          ["a/cli", "1.0.0"],
+        ]),
+      };
       const bumps = calculateVersionBumps(
         packages,
         [
           { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
           { packagePath: "a/cli", commit: makeCommit({ type: "fix" }) },
         ],
-        {
-          preid: "beta",
-          lastStableVersions: new Map([
-            ["a/core", "1.0.0"],
-            ["a/cli", "1.0.0"],
-          ]),
-        },
+        prereleaseOpts,
       );
-      const result = applyVersionGroups(bumps, packages, {
-        fixed: [["@a/core", "@a/cli"]],
-      });
+      const result = applyVersionGroups(
+        bumps,
+        packages,
+        {
+          fixed: [["@a/core", "@a/cli"]],
+        },
+        prereleaseOpts,
+      );
       // Both should have the same (highest) prerelease version
       expect(result[0].newVersion).toBe(result[1].newVersion);
       expect(result[0].newVersion).toBe("1.1.0-beta.0");
@@ -690,25 +1293,136 @@ describe("applyVersionGroups", () => {
         makePackage({ name: "@a/ui", path: "a/ui", version: "1.0.0" }),
         makePackage({ name: "@a/theme", path: "a/theme", version: "1.0.0" }),
       ];
+      const prereleaseOpts = {
+        preid: "beta",
+        lastStableVersions: new Map([
+          ["a/ui", "1.0.0"],
+          ["a/theme", "1.0.0"],
+        ]),
+      };
       const bumps = calculateVersionBumps(
         packages,
         [
           { packagePath: "a/ui", commit: makeCommit({ type: "feat" }) },
           { packagePath: "a/theme", commit: makeCommit({ type: "fix" }) },
         ],
-        {
-          preid: "beta",
-          lastStableVersions: new Map([
-            ["a/ui", "1.0.0"],
-            ["a/theme", "1.0.0"],
-          ]),
-        },
+        prereleaseOpts,
       );
-      const result = applyVersionGroups(bumps, packages, {
-        linked: [["@a/ui", "@a/theme"]],
-      });
+      const result = applyVersionGroups(
+        bumps,
+        packages,
+        {
+          linked: [["@a/ui", "@a/theme"]],
+        },
+        prereleaseOpts,
+      );
       expect(result[0].newVersion).toBe("1.1.0-beta.0");
       expect(result[1].newVersion).toBe("1.1.0-beta.0");
+    });
+
+    it("fixed group adds non-bumped package with prerelease version (not stable)", () => {
+      // BUG-3 regression: non-bumped packages in fixed group must use prerelease version
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.0.0" }),
+      ];
+      const prereleaseOpts = {
+        preid: "beta",
+        lastStableVersions: new Map([
+          ["a/core", "1.0.0"],
+          ["a/cli", "1.0.0"],
+        ]),
+      };
+      // Only core has commits
+      const bumps = calculateVersionBumps(
+        packages,
+        [{ packagePath: "a/core", commit: makeCommit({ type: "feat" }) }],
+        prereleaseOpts,
+      );
+      const result = applyVersionGroups(
+        bumps,
+        packages,
+        {
+          fixed: [["@a/core", "@a/cli"]],
+        },
+        prereleaseOpts,
+      );
+      // cli has no commits but should be added with prerelease version
+      expect(result).toHaveLength(2);
+      const core = result.find((b) => b.packageName === "@a/core")!;
+      const cli = result.find((b) => b.packageName === "@a/cli")!;
+      expect(core.newVersion).toBe("1.1.0-beta.0");
+      expect(cli.newVersion).toBe("1.1.0-beta.0");
+      // Must NOT be a stable version like "1.1.0"
+      expect(cli.newVersion).toContain("-beta.");
+    });
+
+    it("fixed group with higher-version non-bumped package in prerelease mode", () => {
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.2.0" }),
+      ];
+      const prereleaseOpts = {
+        preid: "beta",
+        lastStableVersions: new Map([
+          ["a/core", "1.0.0"],
+          ["a/cli", "1.2.0"],
+        ]),
+      };
+      const bumps = calculateVersionBumps(
+        packages,
+        [{ packagePath: "a/core", commit: makeCommit({ type: "fix" }) }],
+        prereleaseOpts,
+      );
+      const result = applyVersionGroups(
+        bumps,
+        packages,
+        {
+          fixed: [["@a/core", "@a/cli"]],
+        },
+        prereleaseOpts,
+      );
+      // cli has higher base (1.2.0), so patch from 1.2.0 -> 1.2.1-beta.0
+      // which is higher than core's 1.0.1-beta.0
+      const core = result.find((b) => b.packageName === "@a/core")!;
+      const cli = result.find((b) => b.packageName === "@a/cli")!;
+      expect(core.newVersion).toBe(cli.newVersion);
+      expect(cli.newVersion).toContain("-beta.");
+    });
+
+    it("fixed group prerelease does not produce stable version", () => {
+      // Edge case: all bumps are prerelease, non-bumped pkg wouldBe must also be prerelease
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "2.0.0" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.0.0" }),
+      ];
+      const prereleaseOpts = {
+        preid: "rc",
+        lastStableVersions: new Map([
+          ["a/core", "2.0.0"],
+          ["a/cli", "1.0.0"],
+        ]),
+      };
+      const bumps = calculateVersionBumps(
+        packages,
+        [{ packagePath: "a/cli", commit: makeCommit({ type: "feat" }) }],
+        prereleaseOpts,
+      );
+      const result = applyVersionGroups(
+        bumps,
+        packages,
+        {
+          fixed: [["@a/core", "@a/cli"]],
+        },
+        prereleaseOpts,
+      );
+      // core has no commits but higher base version (2.0.0)
+      // wouldBe prerelease: bumpPrerelease("2.0.0", "2.0.0", "minor", "rc") = "2.1.0-rc.0"
+      // cli: bumpPrerelease("1.0.0", "1.0.0", "minor", "rc") = "1.1.0-rc.0"
+      // finalVersion = max(1.1.0-rc.0, 2.1.0-rc.0) = 2.1.0-rc.0
+      for (const b of result) {
+        expect(b.newVersion).toContain("-rc.");
+      }
     });
   });
 
@@ -782,6 +1496,79 @@ describe("applyVersionGroups", () => {
       });
       expect(result).toHaveLength(1);
       expect(result[0].newVersion).toBe("1.0.1");
+    });
+
+    it("fixed group with propagated package aligns version", () => {
+      // core(pub, feat) -> cli(pub, propagated). Both in fixed group.
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.0.0" }),
+        makePackage({
+          name: "@a/cli",
+          path: "a/cli",
+          version: "1.0.0",
+          workspaceDeps: ["@a/core"],
+        }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/core", commit: makeCommit({ type: "feat" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      const core = result.find((b) => b.packageName === "@a/core")!;
+      const cli = result.find((b) => b.packageName === "@a/cli")!;
+      // Fixed group: both should get the same version (core's 1.1.0 wins over cli's 1.0.1)
+      expect(core.newVersion).toBe("1.1.0");
+      expect(cli.newVersion).toBe("1.1.0");
+    });
+
+    it("fixed group with rollup package aligns version", () => {
+      // lib(unpub, feat) -> cli(pub, rollup minor). cli in fixed group with app(pub, no changes).
+      const packages = [
+        makePackage({ name: "@a/lib", path: "a/lib", publish: false }),
+        makePackage({
+          name: "@a/cli",
+          path: "a/cli",
+          version: "1.0.0",
+          workspaceDeps: ["@a/lib"],
+        }),
+        makePackage({ name: "@a/app", path: "a/app", version: "1.0.0" }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "a/lib", commit: makeCommit({ type: "feat" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/cli", "@a/app"]],
+      });
+      const cli = result.find((b) => b.packageName === "@a/cli")!;
+      const app = result.find((b) => b.packageName === "@a/app")!;
+      // cli gets minor from rollup (1.1.0). app should be added to match.
+      expect(cli.newVersion).toBe("1.1.0");
+      expect(app.newVersion).toBe("1.1.0");
+    });
+
+    it("linked group with propagated packages aligns to highest", () => {
+      // hub(pub, feat) -> a(pub, propagated) and b(pub, propagated)
+      // a and b in linked group. Both are propagated patch 1.0.1.
+      // b also has a direct fix. So b = 1.0.1 (direct), a = 1.0.1 (propagated).
+      // Linked should align them (already same in this case).
+      const packages = [
+        makePackage({ name: "hub", path: "hub", publish: true }),
+        makePackage({ name: "a", path: "a", publish: true, workspaceDeps: ["hub"] }),
+        makePackage({ name: "b", path: "b", publish: true, workspaceDeps: ["hub"] }),
+      ];
+      const bumps = calculateVersionBumps(packages, [
+        { packagePath: "hub", commit: makeCommit({ type: "feat" }) },
+        { packagePath: "b", commit: makeCommit({ hash: "b1", type: "feat" }) },
+      ]);
+      const result = applyVersionGroups(bumps, packages, {
+        linked: [["a", "b"]],
+      });
+      const a = result.find((b) => b.packageName === "a")!;
+      const b = result.find((b) => b.packageName === "b")!;
+      // b has direct feat (1.1.0), a is propagated (1.0.1). Linked aligns to highest.
+      expect(a.newVersion).toBe(b.newVersion);
+      expect(b.newVersion).toBe("1.1.0");
     });
   });
 

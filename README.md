@@ -162,7 +162,7 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 
 **Rollup**: if a sub-package has `publish: false`, its commits are "rolled up" into the parent published package's changelog. This is useful for monorepos where internal packages are bundled into a single published CLI or library. The rollup walks the dependency graph transitively -- if A depends on B depends on C (both unpublished), A gets commits from both B and C.
 
-**Workspace deps**: `dependencies`, `peerDependencies`, and `devDependencies` that reference workspace packages are all tracked for propagation and rollup.
+**Workspace deps**: `dependencies` and `peerDependencies` that reference workspace packages are tracked for propagation and rollup. `devDependencies` are not tracked for propagation but their version ranges are updated when workspace packages are released.
 
 ### Pre-release Versions
 

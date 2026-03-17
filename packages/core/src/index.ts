@@ -9,6 +9,7 @@ export {
   executeRelease,
   publishGitHubReleases,
   updatePackageVersion,
+  updateVersionRange,
   updateWorkspaceDeps,
 } from "./releaser";
 export { formatTagName, resolveTagFormat, resolveTagPrefix } from "./tag-format";

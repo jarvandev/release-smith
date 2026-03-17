@@ -186,7 +186,7 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   );
 
   if (config?.groups) {
-    bumps = applyVersionGroups(bumps, packages, config.groups);
+    bumps = applyVersionGroups(bumps, packages, config.groups, prereleaseOpts);
   }
 
   const prLabels = config?.prLabels ?? ["autorelease: pending"];

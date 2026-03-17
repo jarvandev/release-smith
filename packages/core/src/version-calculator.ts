@@ -237,6 +237,7 @@ export function applyVersionGroups(
   bumps: VersionBump[],
   packages: ResolvedPackage[],
   groups: VersionGroups,
+  prerelease?: PrereleaseOptions,
 ): VersionBump[] {
   const result = bumps.map((b) => ({ ...b }));
   const bumpByName = new Map(result.map((b) => [b.packageName, b]));
@@ -269,7 +270,14 @@ export function applyVersionGroups(
     for (const pkg of groupPackages) {
       if (bumpByName.has(pkg.name)) continue;
       const stable = pkg.version.replace(/-.*$/, "");
-      const wouldBe = bumpVersion(stable, highestLevel);
+      const wouldBe = prerelease
+        ? bumpPrerelease(
+            pkg.version,
+            prerelease.lastStableVersions.get(pkg.path) ?? stable,
+            highestLevel,
+            prerelease.preid,
+          )
+        : bumpVersion(stable, highestLevel);
       if (semver.gt(wouldBe, finalVersion)) {
         finalVersion = wouldBe;
       }

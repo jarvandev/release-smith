@@ -28,18 +28,41 @@ export async function updateWorkspaceDeps(
     if (!deps) continue;
     for (const [name, version] of versionMap) {
       if (!(name in deps)) continue;
-      const currentValue = deps[name] as string;
-      if (currentValue.startsWith("workspace:")) {
-        deps[name] = `workspace:^${version}`;
-      } else {
-        deps[name] = `^${version}`;
-      }
+      const updated = updateVersionRange(deps[name] as string, version);
+      if (updated === null || updated === deps[name]) continue;
+      deps[name] = updated;
       changed = true;
     }
   }
   if (changed) {
     await writeFile(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
   }
+}
+
+/**
+ * Update a version range string with a new version while preserving
+ * the original range format (^, ~, >=, exact, workspace: protocol, etc.).
+ *
+ * Only handles simple ranges (^x.y.z, ~x.y.z, >=x.y.z, x.y.z).
+ * Complex ranges like ">=1.0.0 <2.0.0" or "1.x || 2.x" are not supported.
+ *
+ * Returns null if no update is needed (e.g., workspace:* auto-resolves).
+ */
+export function updateVersionRange(current: string, newVersion: string): string | null {
+  if (current.startsWith("workspace:")) {
+    const range = current.slice("workspace:".length);
+    // Auto-resolving workspace ranges: *, ^, ~ (no version number)
+    // These are resolved by the package manager at publish time
+    if (range === "*" || range === "^" || range === "~") return null;
+    return `workspace:${replaceVersion(range, newVersion)}`;
+  }
+  return replaceVersion(current, newVersion);
+}
+
+function replaceVersion(range: string, newVersion: string): string {
+  // Extract everything before the first digit as the range prefix
+  const prefix = range.match(/^[^\d]*/)?.[0] ?? "";
+  return `${prefix}${newVersion}`;
 }
 
 /**

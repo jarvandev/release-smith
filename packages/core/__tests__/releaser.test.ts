@@ -9,6 +9,7 @@ import {
   buildCommitMessage,
   createReleaseTags,
   updatePackageVersion,
+  updateVersionRange,
   updateWorkspaceDeps,
 } from "../src/releaser";
 import type { VersionBump } from "../src/types";
@@ -56,12 +57,32 @@ describe("updateWorkspaceDeps", () => {
     await rm(tempDir, { recursive: true });
   });
 
-  it("updates workspace dependency versions", async () => {
+  it("preserves workspace:* (auto-resolving range)", async () => {
     await mkdir(join(tempDir, "packages/cli"), { recursive: true });
     await writeFile(
       join(tempDir, "packages/cli/package.json"),
       `${JSON.stringify(
         { name: "@myapp/cli", version: "1.0.0", dependencies: { "@myapp/core": "workspace:*" } },
+        null,
+        2,
+      )}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "1.1.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/cli"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/cli/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe("workspace:*");
+  });
+
+  it("updates workspace:^x.y.z preserving caret", async () => {
+    await mkdir(join(tempDir, "packages/cli"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/cli/package.json"),
+      `${JSON.stringify(
+        {
+          name: "@myapp/cli",
+          version: "1.0.0",
+          dependencies: { "@myapp/core": "workspace:^1.0.0" },
+        },
         null,
         2,
       )}\n`,
@@ -98,7 +119,7 @@ describe("updateWorkspaceDeps", () => {
         {
           name: "@myapp/app",
           version: "1.0.0",
-          dependencies: { "@myapp/core": "workspace:*", lodash: "^4.17.0" },
+          dependencies: { "@myapp/core": "workspace:^1.0.0", lodash: "^4.17.0" },
         },
         null,
         2,
@@ -112,6 +133,106 @@ describe("updateWorkspaceDeps", () => {
     expect(content.dependencies.lodash).toBe("^4.17.0");
   });
 
+  it("preserves tilde range", async () => {
+    await mkdir(join(tempDir, "packages/cli"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/cli/package.json"),
+      `${JSON.stringify(
+        { name: "@myapp/cli", version: "1.0.0", dependencies: { "@myapp/core": "~1.0.0" } },
+        null,
+        2,
+      )}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "1.1.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/cli"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/cli/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe("~1.1.0");
+  });
+
+  it("preserves exact version (no range prefix)", async () => {
+    await mkdir(join(tempDir, "packages/cli"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/cli/package.json"),
+      `${JSON.stringify(
+        { name: "@myapp/cli", version: "1.0.0", dependencies: { "@myapp/core": "1.0.0" } },
+        null,
+        2,
+      )}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "2.0.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/cli"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/cli/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe("2.0.0");
+  });
+
+  it("preserves workspace:~ (auto-resolving shorthand)", async () => {
+    await mkdir(join(tempDir, "packages/cli"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/cli/package.json"),
+      `${JSON.stringify(
+        { name: "@myapp/cli", version: "1.0.0", dependencies: { "@myapp/core": "workspace:~" } },
+        null,
+        2,
+      )}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "1.1.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/cli"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/cli/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe("workspace:~");
+  });
+
+  it("preserves workspace:^ (auto-resolving shorthand)", async () => {
+    await mkdir(join(tempDir, "packages/cli"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/cli/package.json"),
+      `${JSON.stringify(
+        { name: "@myapp/cli", version: "1.0.0", dependencies: { "@myapp/core": "workspace:^" } },
+        null,
+        2,
+      )}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "1.1.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/cli"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/cli/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe("workspace:^");
+  });
+
+  it("updates workspace:~x.y.z preserving tilde", async () => {
+    await mkdir(join(tempDir, "packages/cli"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/cli/package.json"),
+      `${JSON.stringify(
+        {
+          name: "@myapp/cli",
+          version: "1.0.0",
+          dependencies: { "@myapp/core": "workspace:~1.0.0" },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "1.1.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/cli"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/cli/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe("workspace:~1.1.0");
+  });
+
+  it("preserves >= range prefix", async () => {
+    await mkdir(join(tempDir, "packages/cli"), { recursive: true });
+    await writeFile(
+      join(tempDir, "packages/cli/package.json"),
+      `${JSON.stringify(
+        { name: "@myapp/cli", version: "1.0.0", dependencies: { "@myapp/core": ">=1.0.0" } },
+        null,
+        2,
+      )}\n`,
+    );
+    const versionMap = new Map([["@myapp/core", "2.0.0"]]);
+    await updateWorkspaceDeps(join(tempDir, "packages/cli"), versionMap);
+    const content = JSON.parse(await readFile(join(tempDir, "packages/cli/package.json"), "utf-8"));
+    expect(content.dependencies["@myapp/core"]).toBe(">=2.0.0");
+  });
+
   it("handles package.json with no dependencies", async () => {
     await writeFile(
       join(tempDir, "package.json"),
@@ -122,6 +243,60 @@ describe("updateWorkspaceDeps", () => {
     await updateWorkspaceDeps(tempDir, versionMap);
     const content = JSON.parse(await readFile(join(tempDir, "package.json"), "utf-8"));
     expect(content.dependencies).toBeUndefined();
+  });
+});
+
+describe("updateVersionRange", () => {
+  it("returns null for workspace:* (auto-resolving)", () => {
+    expect(updateVersionRange("workspace:*", "2.0.0")).toBeNull();
+  });
+
+  it("returns null for workspace:^ (auto-resolving shorthand)", () => {
+    expect(updateVersionRange("workspace:^", "2.0.0")).toBeNull();
+  });
+
+  it("returns null for workspace:~ (auto-resolving shorthand)", () => {
+    expect(updateVersionRange("workspace:~", "2.0.0")).toBeNull();
+  });
+
+  it("preserves workspace:^ with explicit version", () => {
+    expect(updateVersionRange("workspace:^1.0.0", "2.0.0")).toBe("workspace:^2.0.0");
+  });
+
+  it("preserves workspace:~ with explicit version", () => {
+    expect(updateVersionRange("workspace:~1.0.0", "2.0.0")).toBe("workspace:~2.0.0");
+  });
+
+  it("preserves caret range", () => {
+    expect(updateVersionRange("^1.0.0", "2.0.0")).toBe("^2.0.0");
+  });
+
+  it("preserves tilde range", () => {
+    expect(updateVersionRange("~1.0.0", "2.0.0")).toBe("~2.0.0");
+  });
+
+  it("preserves exact version (no prefix)", () => {
+    expect(updateVersionRange("1.0.0", "2.0.0")).toBe("2.0.0");
+  });
+
+  it("preserves >= range", () => {
+    expect(updateVersionRange(">=1.0.0", "2.0.0")).toBe(">=2.0.0");
+  });
+
+  it("preserves > range", () => {
+    expect(updateVersionRange(">1.0.0", "2.0.0")).toBe(">2.0.0");
+  });
+
+  it("preserves workspace: with exact version (no range prefix)", () => {
+    expect(updateVersionRange("workspace:1.0.0", "2.0.0")).toBe("workspace:2.0.0");
+  });
+
+  it("handles prerelease version as new version", () => {
+    expect(updateVersionRange("^1.0.0", "2.0.0-beta.0")).toBe("^2.0.0-beta.0");
+  });
+
+  it("handles workspace: with prerelease version", () => {
+    expect(updateVersionRange("workspace:^1.0.0", "2.0.0-beta.0")).toBe("workspace:^2.0.0-beta.0");
   });
 });
 
@@ -318,7 +493,8 @@ describe("applyReleaseChanges", () => {
     });
 
     const cliContent = JSON.parse(await readFile(join(cliDir, "package.json"), "utf-8"));
-    expect(cliContent.dependencies["@myapp/core"]).toBe("workspace:^1.1.0");
+    // workspace:* is auto-resolving and should not be changed
+    expect(cliContent.dependencies["@myapp/core"]).toBe("workspace:*");
   });
 
   it("handles multiple bumps", async () => {
