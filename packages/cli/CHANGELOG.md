@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.1] - 2026-03-17
+
+### Bug Fixes
+
+- preserve version range format and fix prerelease in fixed groups ([c12998a](https://github.com/jarvandev/release-smith/commit/c12998a3faa398c447f9a0cdeb5ce62c6e8e36f3))
+
 ## [0.7.0] - 2026-03-16
 
 ### Features
