@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.0] - 2026-03-18
+
+### Features
+
+- auto-detect new packages when running init with existing config ([3a402a7](https://github.com/jarvandev/release-smith/commit/3a402a7179fe915e6735d09bba0b7034d1f0aeb7))
+
 ## [0.7.1] - 2026-03-17
 
 ### Bug Fixes
