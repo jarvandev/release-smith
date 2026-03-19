@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.0] - 2026-03-19
+
+### Features
+
+- update lock file after version bumps in release flow ([2d94f13](https://github.com/jarvandev/release-smith/commit/2d94f1373b5be2c9f636c5bf489c0bcd56bba70e))
+
+### Bug Fixes
+
+- prevent phantom dependency-update bumps from stale unpublished dep commits ([b7388a0](https://github.com/jarvandev/release-smith/commit/b7388a0e4655b1afc5878dcb2eeb25a8439438bf))
+
 ## [0.8.0] - 2026-03-18
 
 ### Features
