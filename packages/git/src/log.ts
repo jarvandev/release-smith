@@ -13,11 +13,17 @@ export async function getCommits(
   cwd: string,
   fromRef: string | null,
   toRef: string,
+  paths?: string[],
 ): Promise<RawCommit[]> {
   const range = fromRef ? `${fromRef}..${toRef}` : toRef;
   const format = [`%H`, `%s`, `%b`].join(FIELD_SEP);
 
-  const output = await execGit(["log", range, `--format=${format}${SEPARATOR}`], cwd);
+  const args = ["log", range, `--format=${format}${SEPARATOR}`];
+  if (paths && paths.length > 0) {
+    args.push("--", ...paths);
+  }
+
+  const output = await execGit(args, cwd);
 
   if (!output) return [];
 

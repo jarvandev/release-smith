@@ -1,7 +1,7 @@
 // @release-smith/core public API
 
 export { generateChangelog, insertChangelog } from "./changelog-generator";
-export { assignCommitsToPackages, parseConventionalCommit } from "./commit-parser";
+export { allFilesIgnored, createIgnoreMatcher, parseConventionalCommit } from "./commit-parser";
 export {
   applyReleaseChanges,
   buildCommitMessage,
@@ -13,19 +13,19 @@ export {
   updateWorkspaceDeps,
 } from "./releaser";
 export { formatTagName, resolveTagFormat, resolveTagPrefix } from "./tag-format";
+export { topologicalSort } from "./topo-sort";
 export type {
   BumpLevel,
   ChangelogEntry,
   ConventionalCommit,
-  PackageCommit,
   ReleaseResult,
   VersionBump,
 } from "./types";
-export type { PrereleaseOptions, RollupCutoffs } from "./version-calculator";
+export type { PrereleaseOptions } from "./version-calculator";
 export {
   applyVersionGroups,
   bumpPrerelease,
   bumpVersion,
-  calculateVersionBumps,
   detectCircularDeps,
+  getHighestBump,
 } from "./version-calculator";

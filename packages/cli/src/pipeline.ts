@@ -1,15 +1,19 @@
 import { discoverPackages, loadConfig, type ResolvedPackage } from "@release-smith/config";
 import {
+  allFilesIgnored,
   applyVersionGroups,
-  assignCommitsToPackages,
+  type BumpLevel,
+  bumpPrerelease,
+  bumpVersion,
   type ConventionalCommit,
-  calculateVersionBumps,
+  createIgnoreMatcher,
   detectCircularDeps,
+  getHighestBump,
   type PrereleaseOptions,
   parseConventionalCommit,
-  type RollupCutoffs,
   resolveTagFormat,
   resolveTagPrefix,
+  topologicalSort,
   type VersionBump,
 } from "@release-smith/core";
 import { execGit, getChangedFiles, getCommits, getLatestVersionTag } from "@release-smith/git";
@@ -46,14 +50,13 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   const cycle = detectCircularDeps(packages);
   if (cycle) throw new Error(`Circular dependency detected: ${cycle.join(" -> ")}`);
 
-  // Collect per-package latest tags (only published packages have meaningful tags)
-  const packageTags = new Map<string, string | null>();
-  // For packages with no tag, a "from" commit can serve as the baseline
-  const packageFromRefs = new Map<string, string>();
-  let earliestRef: string | null = null;
-  let hasPublishedPackageWithNoBaseline = false;
+  // Build lookup maps
+  const packageByName = new Map(packages.map((p) => [p.name, p]));
+  const sorted = topologicalSort(packages);
 
-  for (const pkg of packages) {
+  // Collect per-package latest tags and baselines
+  const packageTags = new Map<string, string | null>();
+  for (const pkg of sorted) {
     if (!pkg.publish) {
       packageTags.set(pkg.path, null);
       continue;
@@ -61,107 +64,9 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     const prefix = resolveTagPrefix(tagFormat, pkg.name);
     const tag = await getLatestVersionTag(cwd, prefix);
     packageTags.set(pkg.path, tag);
-    if (tag === null) {
-      if (pkg.from) {
-        // Use "from" commit as baseline for packages that have never been released
-        packageFromRefs.set(pkg.path, pkg.from);
-      } else {
-        hasPublishedPackageWithNoBaseline = true;
-      }
-    }
-    // Track the earliest ref (tag or from) for commit fetching
-    const ref = tag ?? pkg.from ?? null;
-    if (!ref) continue;
-    if (!earliestRef) {
-      earliestRef = ref;
-    } else {
-      const refDate = await execGit(["log", "-1", "--format=%ct", ref], cwd);
-      const earliestDate = await execGit(["log", "-1", "--format=%ct", earliestRef], cwd);
-      if (parseInt(refDate, 10) < parseInt(earliestDate, 10)) earliestRef = ref;
-    }
   }
 
-  const fromRef = hasPublishedPackageWithNoBaseline ? null : earliestRef;
-  const rawCommits = await getCommits(cwd, fromRef, "HEAD");
-  const allParsed: ConventionalCommit[] = [];
-  const filesMap = new Map<string, string[]>();
-
-  for (const rawCommit of rawCommits) {
-    const parsed = parseConventionalCommit(rawCommit.hash, rawCommit.message, rawCommit.body);
-    if (parsed) allParsed.push(parsed);
-    const files = await getChangedFiles(cwd, rawCommit.hash);
-    filesMap.set(rawCommit.hash, files);
-  }
-
-  // Get tag timestamps for per-package filtering
-  const tagTimestamps = new Map<string, number>();
-  for (const [, tag] of packageTags) {
-    if (tag && !tagTimestamps.has(tag)) {
-      const ts = await execGit(["log", "-1", "--format=%ct", tag], cwd);
-      tagTimestamps.set(tag, parseInt(ts, 10));
-    }
-  }
-
-  // Get commit timestamps
-  const commitTimestamps = new Map<string, number>();
-  for (const commit of allParsed) {
-    if (!commitTimestamps.has(commit.hash)) {
-      const ts = await execGit(["log", "-1", "--format=%ct", commit.hash], cwd);
-      commitTimestamps.set(commit.hash, parseInt(ts, 10));
-    }
-  }
-
-  const packagePaths = packages.map((p) => p.path);
-  const ignoreFilesMap = new Map<string, string[]>();
-  for (const pkg of packages) {
-    if (pkg.ignoreFiles.length > 0) {
-      ignoreFilesMap.set(pkg.path, pkg.ignoreFiles);
-    }
-  }
-  const allPackageCommits = assignCommitsToPackages(
-    allParsed,
-    filesMap,
-    packagePaths,
-    ignoreFilesMap,
-  );
-
-  // Resolve per-package baseline timestamps (tag or "from" commit)
-  const packageBaselineTs = new Map<string, number>();
-  for (const pkg of packages) {
-    const tag = packageTags.get(pkg.path);
-    if (tag) {
-      const ts = tagTimestamps.get(tag);
-      if (ts !== undefined) packageBaselineTs.set(pkg.path, ts);
-    } else {
-      const fromRef = packageFromRefs.get(pkg.path);
-      if (fromRef) {
-        const ts = await execGit(["log", "-1", "--format=%ct", fromRef], cwd);
-        packageBaselineTs.set(pkg.path, parseInt(ts, 10));
-      }
-    }
-  }
-
-  // Filter commits per-package: only include commits after each package's baseline.
-  // Unpublished packages have no baseline and pass through all commits here;
-  // their rollup filtering is handled inside calculateVersionBumps via rollupCutoffs.
-  const filteredPackageCommits = allPackageCommits.filter((pc) => {
-    const baselineTs = packageBaselineTs.get(pc.packagePath);
-    if (baselineTs === undefined) return true;
-    const commitTs = commitTimestamps.get(pc.commit.hash);
-    if (commitTs === undefined) return true;
-    return commitTs > baselineTs;
-  });
-
-  // Build per-published-package cutoff timestamps for rollup filtering.
-  // Each published package uses its own baseline to filter rolled-up
-  // commits from unpublished deps, so only new commits are included.
-  const packageCutoffs = new Map<string, number>();
-  for (const [path, ts] of packageBaselineTs) {
-    const pkg = packages.find((p) => p.path === path);
-    if (pkg?.publish) packageCutoffs.set(path, ts);
-  }
-  const rollupCutoffs: RollupCutoffs = { packageCutoffs, commitTimestamps };
-
+  // Resolve prerelease options
   let prereleaseOpts: PrereleaseOptions | undefined;
   if (preid) {
     const lastStableVersions = new Map<string, string>();
@@ -178,13 +83,55 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     prereleaseOpts = { preid, lastStableVersions };
   }
 
-  let bumps = calculateVersionBumps(
-    packages,
-    filteredPackageCommits,
-    prereleaseOpts,
-    rollupCutoffs,
-  );
+  // Per-package traversal in topological order
+  const bumpedPackages = new Set<string>();
+  const results: VersionBump[] = [];
 
+  for (const pkg of sorted) {
+    if (!pkg.publish) continue;
+
+    const baseline = packageTags.get(pkg.path) ?? pkg.from ?? null;
+
+    // Get direct commits for this package
+    const directCommits = await getPackageCommits(cwd, baseline, pkg.path, pkg.ignoreFiles);
+
+    // Collect rollup commits from unpublished deps
+    const unpubDeps = collectUnpublishedDeps(pkg.name, packageByName);
+    const rollupHashes = new Set<string>();
+    const rollupCommits: ConventionalCommit[] = [];
+    for (const dep of unpubDeps) {
+      const depCommits = await getPackageCommits(cwd, baseline, dep.path, dep.ignoreFiles);
+      for (const c of depCommits) {
+        if (!rollupHashes.has(c.hash)) {
+          rollupHashes.add(c.hash);
+          rollupCommits.push(c);
+        }
+      }
+    }
+
+    // Merge direct + rollup (deduplicate)
+    const seenHashes = new Set(directCommits.map((c) => c.hash));
+    const allCommits = [...directCommits];
+    for (const c of rollupCommits) {
+      if (!seenHashes.has(c.hash)) {
+        seenHashes.add(c.hash);
+        allCommits.push(c);
+      }
+    }
+
+    const level = getHighestBump(allCommits);
+    const propagated = shouldPropagate(pkg, packageByName, bumpedPackages);
+
+    if (level) {
+      results.push(makeBump(pkg, level, allCommits, false, prereleaseOpts));
+      bumpedPackages.add(pkg.name);
+    } else if (propagated) {
+      results.push(makeBump(pkg, "patch", [], true, prereleaseOpts));
+      bumpedPackages.add(pkg.name);
+    }
+  }
+
+  let bumps = results;
   if (config?.groups) {
     bumps = applyVersionGroups(bumps, packages, config.groups, prereleaseOpts);
   }
@@ -192,4 +139,128 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   const prLabels = config?.prLabels ?? ["autorelease: pending"];
 
   return { packages, bumps, isMonorepo, tagFormat, prLabels };
+}
+
+function makeBump(
+  pkg: ResolvedPackage,
+  level: BumpLevel,
+  commits: ConventionalCommit[],
+  propagated: boolean,
+  prerelease?: PrereleaseOptions,
+): VersionBump {
+  const newVersion = prerelease
+    ? bumpPrerelease(
+        pkg.version,
+        prerelease.lastStableVersions.get(pkg.path) ?? pkg.version,
+        level,
+        prerelease.preid,
+      )
+    : bumpVersion(pkg.version, level);
+  return {
+    packagePath: pkg.path,
+    packageName: pkg.name,
+    currentVersion: pkg.version,
+    newVersion,
+    level,
+    commits,
+    propagated,
+  };
+}
+
+/**
+ * Fetch commits for a specific package path, parse as conventional commits,
+ * and optionally filter by ignoreFiles patterns.
+ */
+async function getPackageCommits(
+  cwd: string,
+  baseline: string | null,
+  pkgPath: string,
+  ignoreFiles: string[],
+): Promise<ConventionalCommit[]> {
+  const rawCommits = await getCommits(cwd, baseline, "HEAD", [pkgPath]);
+  const parsed: ConventionalCommit[] = [];
+
+  for (const raw of rawCommits) {
+    const commit = parseConventionalCommit(raw.hash, raw.message, raw.body);
+    if (commit) parsed.push(commit);
+  }
+
+  const matcher = createIgnoreMatcher(ignoreFiles);
+  if (!matcher) return parsed;
+
+  // Filter: only include commits that touch at least one non-ignored file
+  const filtered: ConventionalCommit[] = [];
+  for (const commit of parsed) {
+    const files = await getChangedFiles(cwd, commit.hash);
+    const pkgFiles = files
+      .filter((f) => pkgPath === "." || f.startsWith(`${pkgPath}/`))
+      .map((f) => (pkgPath === "." ? f : f.slice(pkgPath.length + 1)));
+    if (!allFilesIgnored(pkgFiles, matcher)) {
+      filtered.push(commit);
+    }
+  }
+  return filtered;
+}
+
+/**
+ * Recursively collect all unpublished deps (transitive).
+ * Stops at published package boundaries.
+ */
+function collectUnpublishedDeps(
+  pkgName: string,
+  packageByName: Map<string, ResolvedPackage>,
+): ResolvedPackage[] {
+  const result: ResolvedPackage[] = [];
+  const visited = new Set<string>();
+
+  function walk(name: string) {
+    const pkg = packageByName.get(name);
+    if (!pkg) return;
+
+    for (const depName of pkg.workspaceDeps) {
+      if (visited.has(depName)) continue;
+      visited.add(depName);
+
+      const dep = packageByName.get(depName);
+      if (!dep || dep.publish) continue;
+
+      result.push(dep);
+      walk(depName);
+    }
+  }
+
+  walk(pkgName);
+  return result;
+}
+
+/**
+ * Check whether a package should be propagated (patch bump) due to
+ * a published dependency being bumped. Also checks transitively through
+ * unpublished deps to find published deps that were bumped.
+ */
+function shouldPropagate(
+  pkg: ResolvedPackage,
+  packageByName: Map<string, ResolvedPackage>,
+  bumpedPackages: Set<string>,
+): boolean {
+  const visited = new Set<string>();
+
+  function check(p: ResolvedPackage): boolean {
+    for (const depName of p.workspaceDeps) {
+      if (visited.has(depName)) continue;
+      visited.add(depName);
+
+      const dep = packageByName.get(depName);
+      if (!dep) continue;
+
+      if (dep.publish) {
+        if (bumpedPackages.has(depName)) return true;
+      } else {
+        if (check(dep)) return true;
+      }
+    }
+    return false;
+  }
+
+  return check(pkg);
 }

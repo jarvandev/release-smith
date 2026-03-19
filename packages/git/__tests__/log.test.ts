@@ -57,6 +57,64 @@ describe("getCommits", () => {
     expect(commits[0].hash).toMatch(/^[a-f0-9]{40}$/);
   });
 
+  it("filters commits by path", async () => {
+    await Bun.spawn(["mkdir", "-p", "src", "docs"], { cwd: tempDir }).exited;
+    await writeFile(join(tempDir, "src/index.ts"), "export default 1;");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "feat: add index"], { cwd: tempDir }).exited;
+
+    await writeFile(join(tempDir, "docs/readme.md"), "# Docs");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "docs: add readme"], { cwd: tempDir }).exited;
+
+    await writeFile(join(tempDir, "src/utils.ts"), "export const x = 1;");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "feat: add utils"], { cwd: tempDir }).exited;
+
+    const srcCommits = await getCommits(tempDir, null, "HEAD", ["src"]);
+    expect(srcCommits).toHaveLength(2);
+    expect(srcCommits[0].message).toBe("feat: add utils");
+    expect(srcCommits[1].message).toBe("feat: add index");
+
+    const docsCommits = await getCommits(tempDir, null, "HEAD", ["docs"]);
+    expect(docsCommits).toHaveLength(1);
+    expect(docsCommits[0].message).toBe("docs: add readme");
+  });
+
+  it("path filtering works with ref range", async () => {
+    await Bun.spawn(["mkdir", "-p", "pkg-a", "pkg-b"], { cwd: tempDir }).exited;
+    await writeFile(join(tempDir, "pkg-a/file.ts"), "a1");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "feat: a1"], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "tag", "v1.0.0"], { cwd: tempDir }).exited;
+
+    await writeFile(join(tempDir, "pkg-a/file.ts"), "a2");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "feat: a2"], { cwd: tempDir }).exited;
+
+    await writeFile(join(tempDir, "pkg-b/file.ts"), "b1");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "feat: b1"], { cwd: tempDir }).exited;
+
+    const aCommits = await getCommits(tempDir, "v1.0.0", "HEAD", ["pkg-a"]);
+    expect(aCommits).toHaveLength(1);
+    expect(aCommits[0].message).toBe("feat: a2");
+
+    const bCommits = await getCommits(tempDir, "v1.0.0", "HEAD", ["pkg-b"]);
+    expect(bCommits).toHaveLength(1);
+    expect(bCommits[0].message).toBe("feat: b1");
+  });
+
+  it("returns empty when no commits match the path", async () => {
+    await Bun.spawn(["mkdir", "-p", "src"], { cwd: tempDir }).exited;
+    await writeFile(join(tempDir, "src/index.ts"), "code");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "feat: code"], { cwd: tempDir }).exited;
+
+    const commits = await getCommits(tempDir, null, "HEAD", ["nonexistent"]);
+    expect(commits).toHaveLength(0);
+  });
+
   it("includes multiline body", async () => {
     await writeFile(join(tempDir, "file.txt"), "content");
     await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;

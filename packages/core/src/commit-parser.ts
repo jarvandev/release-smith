@@ -22,6 +22,24 @@ export function parseConventionalCommit(
   };
 }
 
+/**
+ * Create a compiled matcher for ignore patterns.
+ * Returns null if no patterns are provided.
+ */
+export function createIgnoreMatcher(patterns: string[]): picomatch.Matcher | null {
+  if (patterns.length === 0) return null;
+  return picomatch(patterns, { dot: true });
+}
+
+/**
+ * Check whether all files in a list are matched by the given ignore matcher.
+ * Returns true if ALL files are ignored (commit should be excluded).
+ */
+export function allFilesIgnored(files: string[], matcher: picomatch.Matcher): boolean {
+  if (files.length === 0) return false;
+  return !files.some((f) => !matcher(f));
+}
+
 export function assignCommitsToPackages(
   commits: ConventionalCommit[],
   filesMap: Map<string, string[]>,

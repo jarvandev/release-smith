@@ -1,6 +1,6 @@
 import type { ResolvedPackage, VersionGroups } from "@release-smith/config";
 import semver from "semver";
-import type { BumpLevel, ConventionalCommit, PackageCommit, VersionBump } from "./types";
+import type { BumpLevel, ConventionalCommit, VersionBump } from "./types";
 
 const BUMP_ORDER: Record<BumpLevel, number> = { patch: 0, minor: 1, major: 2 };
 const TYPE_TO_BUMP: Record<string, BumpLevel> = { fix: "patch", feat: "minor" };
@@ -10,21 +10,6 @@ export interface PrereleaseOptions {
   preid: string;
   /** Map of packagePath -> last stable version (from the latest stable tag). */
   lastStableVersions: Map<string, string>;
-}
-
-/**
- * Optional timestamp-based filter for rolled-up commits.
- *
- * Each published package has its own tag cutoff timestamp.
- * During rollup, only commits NEWER than the consuming published
- * package's cutoff are included. This prevents unpublished dep
- * commits that were already released from being rolled up again.
- */
-export interface RollupCutoffs {
-  /** Map of published packagePath -> tag timestamp (epoch seconds). */
-  packageCutoffs: Map<string, number>;
-  /** Map of commit hash -> timestamp (epoch seconds). */
-  commitTimestamps: Map<string, number>;
 }
 
 export function bumpVersion(current: string, level: BumpLevel): string {
@@ -65,172 +50,7 @@ export function bumpPrerelease(
   return `${targetStable}-${preid}.0`;
 }
 
-export function calculateVersionBumps(
-  packages: ResolvedPackage[],
-  packageCommits: PackageCommit[],
-  prerelease?: PrereleaseOptions,
-  rollupCutoffs?: RollupCutoffs,
-): VersionBump[] {
-  const packageByName = new Map(packages.map((p) => [p.name, p]));
-
-  const commitsByPath = new Map<string, ConventionalCommit[]>();
-  for (const pc of packageCommits) {
-    const existing = commitsByPath.get(pc.packagePath) ?? [];
-    existing.push(pc.commit);
-    commitsByPath.set(pc.packagePath, existing);
-  }
-
-  const directBumps = new Map<string, { level: BumpLevel; commits: ConventionalCommit[] }>();
-  for (const [path, commits] of commitsByPath) {
-    const level = getHighestBump(commits);
-    if (level) directBumps.set(path, { level, commits });
-  }
-
-  const reverseDeps = new Map<string, string[]>();
-  for (const pkg of packages) {
-    for (const dep of pkg.workspaceDeps) {
-      const existing = reverseDeps.get(dep) ?? [];
-      existing.push(pkg.name);
-      reverseDeps.set(dep, existing);
-    }
-  }
-
-  // Phase 1: Compute direct bumps + rollup for all published packages.
-  // This determines which published packages are actually bumped.
-  const rollupByPath = new Map<string, ConventionalCommit[]>();
-  const bumpedPublished = new Set<string>();
-  for (const pkg of packages) {
-    if (!pkg.publish) continue;
-    const direct = directBumps.get(pkg.path);
-
-    const rolledUpRaw = collectUnpublishedDepCommits(
-      pkg.name,
-      packageByName,
-      directBumps,
-      new Set(),
-    );
-    const cutoff = rollupCutoffs?.packageCutoffs.get(pkg.path);
-    const seenHashes = new Set<string>();
-    const rolledUp = rolledUpRaw.filter((c) => {
-      if (seenHashes.has(c.hash)) return false;
-      seenHashes.add(c.hash);
-      if (cutoff !== undefined && rollupCutoffs) {
-        const ts = rollupCutoffs.commitTimestamps.get(c.hash);
-        if (ts !== undefined && ts <= cutoff) return false;
-      }
-      return true;
-    });
-    rollupByPath.set(pkg.path, rolledUp);
-
-    if (direct || rolledUp.length > 0) {
-      bumpedPublished.add(pkg.name);
-    }
-  }
-
-  // Phase 2: Propagate only from published packages that are actually bumped
-  // (via direct commits or rollup). Unpublished dep changes are handled
-  // exclusively through the rollup mechanism above.
-  const propagatedPaths = new Set<string>();
-  const visited = new Set<string>();
-  function propagate(pkgName: string) {
-    if (visited.has(pkgName)) return;
-    visited.add(pkgName);
-    for (const depName of reverseDeps.get(pkgName) ?? []) {
-      const depPkg = packageByName.get(depName);
-      if (!depPkg) continue;
-      propagatedPaths.add(depPkg.path);
-      propagate(depName);
-    }
-  }
-  for (const name of bumpedPublished) {
-    propagate(name);
-  }
-
-  // Phase 3: Generate results
-  const results: VersionBump[] = [];
-  for (const pkg of packages) {
-    if (!pkg.publish) continue;
-    const direct = directBumps.get(pkg.path);
-    const isPropagated = propagatedPaths.has(pkg.path);
-    const rolledUp = rollupByPath.get(pkg.path) ?? [];
-
-    if (!direct && !isPropagated && rolledUp.length === 0) continue;
-
-    let level: BumpLevel;
-    let isResultPropagated: boolean;
-    let commits: ConventionalCommit[];
-    if (direct) {
-      // Merge own commits with rolled-up commits (deduplicated)
-      const seen = new Set(direct.commits.map((c) => c.hash));
-      const merged = [...direct.commits, ...rolledUp.filter((c) => !seen.has(c.hash))];
-      level = getHighestBump(merged) ?? direct.level;
-      isResultPropagated = false;
-      commits = merged;
-    } else if (rolledUp.length > 0) {
-      // Only rolled-up commits from unpublished deps
-      level = getHighestBump(rolledUp) ?? "patch";
-      isResultPropagated = false;
-      commits = rolledUp;
-    } else {
-      // Propagated from a published dep with no commits to roll up
-      level = "patch";
-      isResultPropagated = true;
-      commits = [];
-    }
-
-    const newVersion = prerelease
-      ? bumpPrerelease(
-          pkg.version,
-          prerelease.lastStableVersions.get(pkg.path) ?? pkg.version,
-          level,
-          prerelease.preid,
-        )
-      : bumpVersion(pkg.version, level);
-
-    results.push({
-      packagePath: pkg.path,
-      packageName: pkg.name,
-      currentVersion: pkg.version,
-      newVersion,
-      level,
-      commits,
-      propagated: isResultPropagated,
-    });
-  }
-  return results;
-}
-
-/**
- * Recursively collect commits from unpublished workspace dependencies.
- * These commits get "rolled up" into the published package's changelog.
- */
-function collectUnpublishedDepCommits(
-  pkgName: string,
-  packageByName: Map<string, ResolvedPackage>,
-  directBumps: Map<string, { level: BumpLevel; commits: ConventionalCommit[] }>,
-  visited: Set<string>,
-): ConventionalCommit[] {
-  if (visited.has(pkgName)) return [];
-  visited.add(pkgName);
-
-  const pkg = packageByName.get(pkgName);
-  if (!pkg) return [];
-
-  const collected: ConventionalCommit[] = [];
-  for (const depName of pkg.workspaceDeps) {
-    const dep = packageByName.get(depName);
-    if (!dep || dep.publish) continue;
-
-    const depBump = directBumps.get(dep.path);
-    if (depBump) {
-      collected.push(...depBump.commits);
-    }
-    collected.push(...collectUnpublishedDepCommits(depName, packageByName, directBumps, visited));
-  }
-  return collected;
-}
-
-function getHighestBump(commits: ConventionalCommit[]): BumpLevel | null {
+export function getHighestBump(commits: ConventionalCommit[]): BumpLevel | null {
   let highest: BumpLevel | null = null;
   for (const commit of commits) {
     if (commit.breaking) return "major";
