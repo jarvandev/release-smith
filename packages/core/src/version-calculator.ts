@@ -71,7 +71,6 @@ export function calculateVersionBumps(
   prerelease?: PrereleaseOptions,
   rollupCutoffs?: RollupCutoffs,
 ): VersionBump[] {
-  const packageByPath = new Map(packages.map((p) => [p.path, p]));
   const packageByName = new Map(packages.map((p) => [p.name, p]));
 
   const commitsByPath = new Map<string, ConventionalCommit[]>();
@@ -96,6 +95,41 @@ export function calculateVersionBumps(
     }
   }
 
+  // Phase 1: Compute direct bumps + rollup for all published packages.
+  // This determines which published packages are actually bumped.
+  const rollupByPath = new Map<string, ConventionalCommit[]>();
+  const bumpedPublished = new Set<string>();
+  for (const pkg of packages) {
+    if (!pkg.publish) continue;
+    const direct = directBumps.get(pkg.path);
+
+    const rolledUpRaw = collectUnpublishedDepCommits(
+      pkg.name,
+      packageByName,
+      directBumps,
+      new Set(),
+    );
+    const cutoff = rollupCutoffs?.packageCutoffs.get(pkg.path);
+    const seenHashes = new Set<string>();
+    const rolledUp = rolledUpRaw.filter((c) => {
+      if (seenHashes.has(c.hash)) return false;
+      seenHashes.add(c.hash);
+      if (cutoff !== undefined && rollupCutoffs) {
+        const ts = rollupCutoffs.commitTimestamps.get(c.hash);
+        if (ts !== undefined && ts <= cutoff) return false;
+      }
+      return true;
+    });
+    rollupByPath.set(pkg.path, rolledUp);
+
+    if (direct || rolledUp.length > 0) {
+      bumpedPublished.add(pkg.name);
+    }
+  }
+
+  // Phase 2: Propagate only from published packages that are actually bumped
+  // (via direct commits or rollup). Unpublished dep changes are handled
+  // exclusively through the rollup mechanism above.
   const propagatedPaths = new Set<string>();
   const visited = new Set<string>();
   function propagate(pkgName: string) {
@@ -108,37 +142,19 @@ export function calculateVersionBumps(
       propagate(depName);
     }
   }
-  for (const [path] of directBumps) {
-    const pkg = packageByPath.get(path);
-    if (pkg) propagate(pkg.name);
+  for (const name of bumpedPublished) {
+    propagate(name);
   }
 
+  // Phase 3: Generate results
   const results: VersionBump[] = [];
   for (const pkg of packages) {
     if (!pkg.publish) continue;
     const direct = directBumps.get(pkg.path);
     const isPropagated = propagatedPaths.has(pkg.path);
-    if (!direct && !isPropagated) continue;
+    const rolledUp = rollupByPath.get(pkg.path) ?? [];
 
-    // Roll up commits from unpublished workspace deps into this package
-    const rolledUpRaw = collectUnpublishedDepCommits(
-      pkg.name,
-      packageByName,
-      directBumps,
-      new Set(),
-    );
-    // Deduplicate (same commit via multiple deps) and apply per-consumer cutoff
-    const cutoff = rollupCutoffs?.packageCutoffs.get(pkg.path);
-    const seenHashes = new Set<string>();
-    const rolledUp = rolledUpRaw.filter((c) => {
-      if (seenHashes.has(c.hash)) return false;
-      seenHashes.add(c.hash);
-      if (cutoff !== undefined && rollupCutoffs) {
-        const ts = rollupCutoffs.commitTimestamps.get(c.hash);
-        if (ts !== undefined && ts <= cutoff) return false;
-      }
-      return true;
-    });
+    if (!direct && !isPropagated && rolledUp.length === 0) continue;
 
     let level: BumpLevel;
     let isResultPropagated: boolean;

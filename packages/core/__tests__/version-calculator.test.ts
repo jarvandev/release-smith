@@ -930,18 +930,13 @@ describe("complex dependency graphs", () => {
         },
       );
       // ts <= cutoff → filtered. No commits remain, no direct bump.
-      // But dep has a direct bump which triggers propagation of app.
-      // app is in propagatedPaths but has no rolled-up commits → propagated patch.
-      expect(bumps).toHaveLength(1);
-      expect(bumps[0].packageName).toBe("app");
-      expect(bumps[0].propagated).toBe(true);
-      expect(bumps[0].commits).toHaveLength(0);
-      expect(bumps[0].newVersion).toBe("1.0.1");
+      // Unpublished deps don't trigger propagation, so app is skipped entirely.
+      expect(bumps).toHaveLength(0);
     });
 
-    it("rollup all filtered by cutoff but package still propagated", () => {
-      // All unpublished dep commits are old (filtered), but the propagation
-      // from the unpublished dep's directBump still marks this package.
+    it("rollup all filtered by cutoff produces no bump", () => {
+      // All unpublished dep commits are old (filtered by cutoff).
+      // Unpublished deps don't trigger propagation, so no bump occurs.
       const packages = [
         makePackage({ name: "lib", path: "lib", publish: false }),
         makePackage({
@@ -966,12 +961,8 @@ describe("complex dependency graphs", () => {
           ]),
         },
       );
-      expect(bumps).toHaveLength(1);
-      expect(bumps[0].packageName).toBe("app");
-      // All rolled-up commits filtered → propagated patch
-      expect(bumps[0].propagated).toBe(true);
-      expect(bumps[0].commits).toHaveLength(0);
-      expect(bumps[0].newVersion).toBe("1.0.1");
+      // All rolled-up commits filtered → no bump (previously produced a phantom patch)
+      expect(bumps).toHaveLength(0);
     });
 
     it("multiple disconnected subgraphs: only affected subgraph bumps", () => {
