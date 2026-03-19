@@ -8,6 +8,8 @@ import {
   applyReleaseChanges,
   buildCommitMessage,
   createReleaseTags,
+  detectPackageManager,
+  updateLockFile,
   updatePackageVersion,
   updateVersionRange,
   updateWorkspaceDeps,
@@ -640,5 +642,75 @@ describe("createReleaseTags", () => {
 
     const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
     expect(tags).toContain("v3.0.0");
+  });
+});
+
+describe("detectPackageManager", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-detect-pm-"));
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("detects bun from bun.lock", async () => {
+    await writeFile(join(tempDir, "bun.lock"), "");
+    expect(await detectPackageManager(tempDir)).toBe("bun");
+  });
+
+  it("detects bun from bun.lockb", async () => {
+    await writeFile(join(tempDir, "bun.lockb"), "");
+    expect(await detectPackageManager(tempDir)).toBe("bun");
+  });
+
+  it("detects pnpm from pnpm-lock.yaml", async () => {
+    await writeFile(join(tempDir, "pnpm-lock.yaml"), "");
+    expect(await detectPackageManager(tempDir)).toBe("pnpm");
+  });
+
+  it("detects yarn from yarn.lock", async () => {
+    await writeFile(join(tempDir, "yarn.lock"), "");
+    expect(await detectPackageManager(tempDir)).toBe("yarn");
+  });
+
+  it("detects npm from package-lock.json", async () => {
+    await writeFile(join(tempDir, "package-lock.json"), "{}");
+    expect(await detectPackageManager(tempDir)).toBe("npm");
+  });
+
+  it("returns null when no lock file exists", async () => {
+    expect(await detectPackageManager(tempDir)).toBeNull();
+  });
+
+  it("prioritizes bun.lockb over other lock files", async () => {
+    await writeFile(join(tempDir, "bun.lockb"), "");
+    await writeFile(join(tempDir, "package-lock.json"), "{}");
+    expect(await detectPackageManager(tempDir)).toBe("bun");
+  });
+});
+
+describe("updateLockFile", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-lockfile-"));
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("skips when no lock file exists", async () => {
+    // Should not throw
+    await updateLockFile(tempDir);
+  });
+
+  it("runs bun install when bun.lock exists", async () => {
+    await writeFile(
+      join(tempDir, "package.json"),
+      JSON.stringify({ name: "test-pkg", version: "1.0.0" }, null, 2),
+    );
+    await writeFile(join(tempDir, "bun.lock"), "");
+    // bun install should succeed without throwing
+    await updateLockFile(tempDir);
   });
 });

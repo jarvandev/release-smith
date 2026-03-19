@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResolvedPackage } from "@release-smith/config";
 import { createTag, execGit } from "@release-smith/git";
@@ -118,6 +119,8 @@ export async function applyReleaseChanges(options: {
   for (const pkg of packages) {
     await updateWorkspaceDeps(join(cwd, pkg.path), versionMap);
   }
+
+  await updateLockFile(cwd);
 
   return results;
 }
@@ -247,4 +250,53 @@ async function readFileSafe(path: string): Promise<string> {
   } catch {
     return "";
   }
+}
+
+type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
+
+const LOCK_FILES: [string, PackageManager][] = [
+  ["bun.lockb", "bun"],
+  ["bun.lock", "bun"],
+  ["pnpm-lock.yaml", "pnpm"],
+  ["yarn.lock", "yarn"],
+  ["package-lock.json", "npm"],
+];
+
+const INSTALL_COMMANDS: Record<PackageManager, [string, string[]]> = {
+  bun: ["bun", ["install"]],
+  pnpm: ["pnpm", ["install", "--lockfile-only"]],
+  yarn: ["yarn", ["install"]],
+  npm: ["npm", ["install", "--package-lock-only"]],
+};
+
+export async function detectPackageManager(cwd: string): Promise<PackageManager | null> {
+  for (const [file, pm] of LOCK_FILES) {
+    try {
+      await access(join(cwd, file));
+      return pm;
+    } catch {
+      // Lock file not found, try next
+    }
+  }
+  return null;
+}
+
+export async function updateLockFile(cwd: string): Promise<void> {
+  const pm = await detectPackageManager(cwd);
+  if (!pm) return;
+
+  const [cmd, args] = INSTALL_COMMANDS[pm];
+  await execCommand(cmd, args, cwd);
+}
+
+function execCommand(cmd: string, args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { cwd, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${cmd} ${args.join(" ")} failed: ${stderr.trim()}`));
+        return;
+      }
+      resolve(stdout);
+    });
+  });
 }
