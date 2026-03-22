@@ -25,6 +25,7 @@ export async function loadConfig(cwd: string): Promise<RawConfig | null> {
   }
 
   const KNOWN_KEYS = new Set([
+    "$schema",
     "packages",
     "tagFormat",
     "branches",
