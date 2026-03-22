@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.1] - 2026-03-22
+
+### Bug Fixes
+
+- improve idempotency and resilience for CI retry scenarios (#13) ([021d62f](https://github.com/jarvandev/release-smith/commit/021d62ffd227d3329d32b8f48fe94ed0b4369dce))
+- strengthen input validation and error reporting (#11) ([64448cd](https://github.com/jarvandev/release-smith/commit/64448cd83a8e82cfa7807a3a219a4eefe5d2ce0f))
+- allow $schema key in config file without warning ([6558c0f](https://github.com/jarvandev/release-smith/commit/6558c0f0918e5e21c6a0e96aa42c994d0dbcc159))
+- prevent changelog double header and validate tag format constraints (#10) ([ecf5bb7](https://github.com/jarvandev/release-smith/commit/ecf5bb700b626406ce4178e400db112033ebf34d))
+
 ## [0.9.0] - 2026-03-19
 
 ### Features
