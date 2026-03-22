@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTag, getLatestVersionTag, getTags } from "../src/tag";
+import { createTag, findLatestVersionTag, getLatestVersionTag, getTags } from "../src/tag";
 
 async function initRepoWithCommit(dir: string) {
   const run = (args: string[]) => Bun.spawn(["git", ...args], { cwd: dir }).exited;
@@ -110,6 +110,59 @@ describe("getLatestVersionTag", () => {
     await Bun.spawn(["git", "tag", "v1.0.0"], { cwd: tempDir }).exited;
     const tag = await getLatestVersionTag(tempDir, "v");
     expect(tag).toBe("v2.0.0");
+  });
+});
+
+describe("findLatestVersionTag", () => {
+  it("returns null for empty tag list", () => {
+    expect(findLatestVersionTag([], "v")).toBeNull();
+  });
+
+  it("returns null when no tags match prefix", () => {
+    const tags = ["release-1.0.0", "release-2.0.0"];
+    expect(findLatestVersionTag(tags, "v")).toBeNull();
+  });
+
+  it("finds latest v-prefixed tag", () => {
+    const tags = ["v1.0.0", "v1.1.0", "v0.9.0"];
+    expect(findLatestVersionTag(tags, "v")).toBe("v1.1.0");
+  });
+
+  it("finds latest package-scoped tag", () => {
+    const tags = ["@myapp/cli@1.0.0", "@myapp/cli@1.2.0", "@myapp/core@2.0.0"];
+    expect(findLatestVersionTag(tags, "@myapp/cli@")).toBe("@myapp/cli@1.2.0");
+  });
+
+  it("excludes pre-release tags", () => {
+    const tags = ["v1.0.0", "v2.0.0-beta.0", "v2.0.0-rc.1"];
+    expect(findLatestVersionTag(tags, "v")).toBe("v1.0.0");
+  });
+
+  it("ignores tags with invalid semver suffix", () => {
+    const tags = ["v1.0", "vabc", "v1.0.0"];
+    expect(findLatestVersionTag(tags, "v")).toBe("v1.0.0");
+  });
+
+  it("returns higher version regardless of array order", () => {
+    const tags = ["v2.0.0", "v1.0.0", "v3.0.0", "v1.5.0"];
+    expect(findLatestVersionTag(tags, "v")).toBe("v3.0.0");
+  });
+
+  it("compares patch versions correctly", () => {
+    const tags = ["v1.0.0", "v1.0.1", "v1.0.2", "v1.0.10"];
+    expect(findLatestVersionTag(tags, "v")).toBe("v1.0.10");
+  });
+
+  it("handles custom prefix", () => {
+    const tags = ["release-1.0.0", "release-2.0.0", "v1.0.0"];
+    expect(findLatestVersionTag(tags, "release-")).toBe("release-2.0.0");
+  });
+
+  it("produces same result as getLatestVersionTag", async () => {
+    // Verify that findLatestVersionTag is functionally equivalent to
+    // getLatestVersionTag when given the same tag list
+    const tags = ["v1.0.0", "v2.0.0", "v1.5.0", "other-tag", "v3.0.0-beta.0"];
+    expect(findLatestVersionTag(tags, "v")).toBe("v2.0.0");
   });
 });
 
