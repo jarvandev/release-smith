@@ -47,6 +47,12 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   let preid = options?.prerelease;
   if (!preid && config?.branches) {
     const branch = (await execGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd)).trim();
+    if (branch === "HEAD" && Object.keys(config.branches).length > 0) {
+      console.warn(
+        "Detached HEAD detected. Branch-based prerelease config will not be applied. " +
+          "Use --prerelease flag to enable prerelease in detached HEAD state.",
+      );
+    }
     const branchConfig = config.branches[branch];
     if (branchConfig?.prerelease) {
       preid = branchConfig.prerelease;

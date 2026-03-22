@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ResolvedPackage } from "@release-smith/config";
-import { createTag, execGit } from "@release-smith/git";
+import { createTag, execGit, getTagCommit, tagExists } from "@release-smith/git";
 import { createGitHubRelease, parseGitHubUrl } from "@release-smith/github";
 import { generateChangelog, insertChangelog } from "./changelog-generator";
 import { formatTagName, resolveTagFormat } from "./tag-format";
@@ -155,7 +155,19 @@ export async function createReleaseTags(
   results: ReleaseResult[],
   push: boolean,
 ): Promise<void> {
+  const head = (await execGit(["rev-parse", "HEAD"], cwd)).trim();
   for (const result of results) {
+    if (await tagExists(cwd, result.tagName)) {
+      const tagCommit = await getTagCommit(cwd, result.tagName);
+      if (tagCommit === head) {
+        console.warn(`Tag ${result.tagName} already exists at HEAD, skipping`);
+      } else {
+        console.warn(
+          `Tag ${result.tagName} already exists but points to a different commit, skipping`,
+        );
+      }
+      continue;
+    }
     await createTag(cwd, result.tagName);
   }
   if (push) {

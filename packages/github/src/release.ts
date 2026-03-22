@@ -28,6 +28,23 @@ export async function createGitHubRelease(
 ): Promise<CreateReleaseResult> {
   if (!options.token)
     return { skipped: true, reason: "GITHUB_TOKEN not set. Skipping GitHub Release creation." };
+
+  // Check if release already exists for this tag
+  try {
+    const existing = await githubRequest(
+      "GET",
+      `/repos/${options.owner}/${options.repo}/releases/tags/${options.tag}`,
+      { token: options.token },
+    );
+    const data = (await existing.json()) as { html_url: string };
+    return {
+      skipped: true,
+      reason: `GitHub Release for tag ${options.tag} already exists: ${data.html_url}`,
+    };
+  } catch {
+    // Release doesn't exist, proceed to create
+  }
+
   const response = await githubRequest(
     "POST",
     `/repos/${options.owner}/${options.repo}/releases`,

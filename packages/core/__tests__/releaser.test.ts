@@ -661,6 +661,76 @@ describe("createReleaseTags", () => {
     const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
     expect(tags).toContain("v3.0.0");
   });
+
+  it("skips existing tag at HEAD without error", async () => {
+    const results = [
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0",
+        changelog: "",
+        tagName: "@myapp/core@1.1.0",
+      },
+    ];
+    // Create the tag first
+    await createReleaseTags(tempDir, results, false);
+    // Calling again should not throw (idempotent)
+    await createReleaseTags(tempDir, results, false);
+
+    const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
+    expect(tags.filter((t) => t === "@myapp/core@1.1.0")).toHaveLength(1);
+  });
+
+  it("skips existing tag on different commit without error", async () => {
+    const results = [
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0",
+        changelog: "",
+        tagName: "@myapp/core@1.1.0",
+      },
+    ];
+    // Create the tag on initial commit
+    await createReleaseTags(tempDir, results, false);
+
+    // Make a new commit (tag now points to old commit)
+    await writeFile(join(tempDir, "new.txt"), "new content");
+    await gitCommit(tempDir, "chore: new commit");
+
+    // Calling again should skip without error
+    await createReleaseTags(tempDir, results, false);
+
+    const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
+    expect(tags.filter((t) => t === "@myapp/core@1.1.0")).toHaveLength(1);
+  });
+
+  it("creates new tags while skipping existing ones", async () => {
+    // Create only the first tag
+    await execGit(["tag", "@myapp/core@1.1.0"], tempDir);
+
+    const results = [
+      {
+        packageName: "@myapp/core",
+        packagePath: "packages/core",
+        version: "1.1.0",
+        changelog: "",
+        tagName: "@myapp/core@1.1.0",
+      },
+      {
+        packageName: "@myapp/cli",
+        packagePath: "packages/cli",
+        version: "2.0.0",
+        changelog: "",
+        tagName: "@myapp/cli@2.0.0",
+      },
+    ];
+    await createReleaseTags(tempDir, results, false);
+
+    const tags = (await execGit(["tag", "-l"], tempDir)).split("\n").filter(Boolean);
+    expect(tags).toContain("@myapp/core@1.1.0");
+    expect(tags).toContain("@myapp/cli@2.0.0");
+  });
 });
 
 describe("detectPackageManager", () => {
