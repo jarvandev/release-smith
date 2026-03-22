@@ -262,4 +262,37 @@ describe("insertChangelog", () => {
     expect(count).toBe(1);
     expect(result).toContain("## [1.0.0]");
   });
+
+  it("strips BOM prefix without duplicating header", () => {
+    const existing =
+      "\uFEFF# Changelog\n\n## [0.1.0] - 2026-03-01\n\n### Features\n\n- initial release\n";
+    const newEntry = "## [0.2.0] - 2026-03-14\n\n### Bug Fixes\n\n- fix bug";
+    const result = insertChangelog(existing, newEntry);
+    const count = result.split("# Changelog").length - 1;
+    expect(count).toBe(1);
+    expect(result).not.toContain("\uFEFF");
+    expect(result).toContain("## [0.2.0]");
+    expect(result).toContain("## [0.1.0]");
+  });
+
+  it("handles leading empty lines before header without duplicating", () => {
+    const existing =
+      "\n\n# Changelog\n\n## [0.1.0] - 2026-03-01\n\n### Features\n\n- initial release\n";
+    const newEntry = "## [0.2.0] - 2026-03-14\n\n### Bug Fixes\n\n- fix bug";
+    const result = insertChangelog(existing, newEntry);
+    const count = result.split("# Changelog").length - 1;
+    expect(count).toBe(1);
+    expect(result).toContain("## [0.2.0]");
+    expect(result).toContain("## [0.1.0]");
+  });
+
+  it("handles BOM with leading whitespace before header", () => {
+    const existing = "\uFEFF\n  \n# Changelog\n\n## [0.1.0] - 2026-03-01\n\n- initial\n";
+    const newEntry = "## [0.2.0] - 2026-03-14\n\n- fix bug";
+    const result = insertChangelog(existing, newEntry);
+    const count = result.split("# Changelog").length - 1;
+    expect(count).toBe(1);
+    expect(result).not.toContain("\uFEFF");
+    expect(result).toContain("## [0.2.0]");
+  });
 });

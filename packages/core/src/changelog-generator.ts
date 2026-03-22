@@ -38,15 +38,16 @@ function formatEntry(commit: ConventionalCommit, repoUrl: string | null): string
 }
 
 export function insertChangelog(existing: string, newEntry: string): string {
-  // Normalize CRLF to LF to avoid mixed line endings
-  const normalized = existing.replace(/\r\n/g, "\n");
-  if (!normalized.trim()) return `# Changelog\n\n${newEntry}\n`;
-  const headerMatch = normalized.match(/^# Changelog\s*\n?$/m);
+  // Strip BOM and normalize CRLF to LF to avoid mixed line endings
+  const normalized = existing.replace(/\r\n/g, "\n").replace(/^\uFEFF/, "");
+  const trimmed = normalized.trimStart();
+  if (!trimmed) return `# Changelog\n\n${newEntry}\n`;
+  const headerMatch = trimmed.match(/^# Changelog\s*\n?$/m);
   if (headerMatch && headerMatch.index === 0) {
     // Skip any blank lines after the header, then insert the new entry
     const afterHeader = headerMatch[0].length;
-    const rest = normalized.slice(afterHeader).replace(/^\n+/, "");
+    const rest = trimmed.slice(afterHeader).replace(/^\n+/, "");
     return `# Changelog\n\n${newEntry}\n${rest}`;
   }
-  return `# Changelog\n\n${newEntry}\n\n${normalized}`;
+  return `# Changelog\n\n${newEntry}\n\n${trimmed}`;
 }

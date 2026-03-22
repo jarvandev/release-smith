@@ -31,8 +31,34 @@ describe("resolveTagFormat", () => {
   });
 
   it("accepts format with {name} but no monorepo flag", () => {
-    // This is allowed - format validation only checks {version}
+    // This is allowed for single-package repos
     expect(resolveTagFormat("{name}-{version}", false)).toBe("{name}-{version}");
+  });
+
+  it("throws when monorepo custom format is missing {name}", () => {
+    expect(() => resolveTagFormat("v{version}", true)).toThrow(
+      'tagFormat must contain "{name}" placeholder for monorepo projects',
+    );
+  });
+
+  it("accepts monorepo format with {name} and {version}", () => {
+    expect(resolveTagFormat("{name}@{version}", true)).toBe("{name}@{version}");
+  });
+
+  it("throws when {version} is not at the end of the format", () => {
+    expect(() => resolveTagFormat("v{version}-{name}", false)).toThrow(
+      'tagFormat must end with "{version}" placeholder',
+    );
+  });
+
+  it("throws when {version} is followed by literal characters", () => {
+    expect(() => resolveTagFormat("{version}-suffix", false)).toThrow(
+      'tagFormat must end with "{version}" placeholder',
+    );
+  });
+
+  it("accepts format ending with {version}", () => {
+    expect(resolveTagFormat("prefix-{version}", false)).toBe("prefix-{version}");
   });
 });
 
