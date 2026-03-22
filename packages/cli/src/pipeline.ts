@@ -16,7 +16,13 @@ import {
   topologicalSort,
   type VersionBump,
 } from "@release-smith/core";
-import { execGit, getChangedFiles, getCommits, getLatestVersionTag } from "@release-smith/git";
+import {
+  execGit,
+  findLatestVersionTag,
+  getChangedFilesForCommits,
+  getCommits,
+  getTags,
+} from "@release-smith/git";
 
 export interface PipelineOptions {
   /** Explicit pre-release identifier (overrides branch config). */
@@ -54,7 +60,8 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   const packageByName = new Map(packages.map((p) => [p.name, p]));
   const sorted = topologicalSort(packages);
 
-  // Collect per-package latest tags and baselines
+  // Fetch all tags once, then resolve per-package latest tags in memory
+  const allTags = await getTags(cwd);
   const packageTags = new Map<string, string | null>();
   for (const pkg of sorted) {
     if (!pkg.publish) {
@@ -62,7 +69,7 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
       continue;
     }
     const prefix = resolveTagPrefix(tagFormat, pkg.name);
-    const tag = await getLatestVersionTag(cwd, prefix);
+    const tag = findLatestVersionTag(allTags, prefix);
     packageTags.set(pkg.path, tag);
   }
 
@@ -83,24 +90,93 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     prereleaseOpts = { preid, lastStableVersions };
   }
 
-  // Per-package traversal in topological order
+  // Collect all paths that need commit lookups (direct + unpub deps)
+  // so we can batch-fetch changed files for ignoreFiles filtering.
+  interface PathQuery {
+    baseline: string | null;
+    pkgPath: string;
+    ignoreFiles: string[];
+  }
+  const pathQueries = new Map<string, PathQuery>();
+
+  for (const pkg of sorted) {
+    if (!pkg.publish) continue;
+    const baseline = packageTags.get(pkg.path) ?? pkg.from ?? null;
+
+    // Direct package path
+    pathQueries.set(pkg.path, { baseline, pkgPath: pkg.path, ignoreFiles: pkg.ignoreFiles });
+
+    // Unpublished dep paths
+    const unpubDeps = collectUnpublishedDeps(pkg.name, packageByName);
+    for (const dep of unpubDeps) {
+      if (!pathQueries.has(dep.path)) {
+        pathQueries.set(dep.path, { baseline, pkgPath: dep.path, ignoreFiles: dep.ignoreFiles });
+      }
+    }
+  }
+
+  // Phase 1: Fetch raw commits for all paths
+  const rawCommitsByPath = new Map<string, ConventionalCommit[]>();
+  const needsFileCheck = new Set<string>(); // commit hashes that need file lookups
+
+  for (const [key, query] of pathQueries) {
+    const rawCommits = await getCommits(cwd, query.baseline, "HEAD", [query.pkgPath]);
+    const parsed: ConventionalCommit[] = [];
+    for (const raw of rawCommits) {
+      const commit = parseConventionalCommit(raw.hash, raw.message, raw.body);
+      if (commit) parsed.push(commit);
+    }
+    rawCommitsByPath.set(key, parsed);
+
+    // Track which commits need file change lookups for ignoreFiles filtering
+    const matcher = createIgnoreMatcher(query.ignoreFiles);
+    if (matcher) {
+      for (const c of parsed) {
+        needsFileCheck.add(c.hash);
+      }
+    }
+  }
+
+  // Phase 2: Batch-fetch changed files for all commits that need filtering
+  const changedFilesMap = await getChangedFilesForCommits(cwd, [...needsFileCheck]);
+
+  // Phase 3: Filter commits using the pre-fetched file data
+  const filteredCommitsByPath = new Map<string, ConventionalCommit[]>();
+  for (const [key, query] of pathQueries) {
+    const parsed = rawCommitsByPath.get(key) ?? [];
+    const matcher = createIgnoreMatcher(query.ignoreFiles);
+    if (!matcher) {
+      filteredCommitsByPath.set(key, parsed);
+      continue;
+    }
+    const filtered: ConventionalCommit[] = [];
+    for (const commit of parsed) {
+      const files = changedFilesMap.get(commit.hash) ?? [];
+      const pkgFiles = files
+        .filter((f) => query.pkgPath === "." || f.startsWith(`${query.pkgPath}/`))
+        .map((f) => (query.pkgPath === "." ? f : f.slice(query.pkgPath.length + 1)));
+      if (!allFilesIgnored(pkgFiles, matcher)) {
+        filtered.push(commit);
+      }
+    }
+    filteredCommitsByPath.set(key, filtered);
+  }
+
+  // Phase 4: Per-package traversal in topological order
   const bumpedPackages = new Set<string>();
   const results: VersionBump[] = [];
 
   for (const pkg of sorted) {
     if (!pkg.publish) continue;
 
-    const baseline = packageTags.get(pkg.path) ?? pkg.from ?? null;
-
-    // Get direct commits for this package
-    const directCommits = await getPackageCommits(cwd, baseline, pkg.path, pkg.ignoreFiles);
+    const directCommits = filteredCommitsByPath.get(pkg.path) ?? [];
 
     // Collect rollup commits from unpublished deps
     const unpubDeps = collectUnpublishedDeps(pkg.name, packageByName);
     const rollupHashes = new Set<string>();
     const rollupCommits: ConventionalCommit[] = [];
     for (const dep of unpubDeps) {
-      const depCommits = await getPackageCommits(cwd, baseline, dep.path, dep.ignoreFiles);
+      const depCommits = filteredCommitsByPath.get(dep.path) ?? [];
       for (const c of depCommits) {
         if (!rollupHashes.has(c.hash)) {
           rollupHashes.add(c.hash);
@@ -165,41 +241,6 @@ function makeBump(
     commits,
     propagated,
   };
-}
-
-/**
- * Fetch commits for a specific package path, parse as conventional commits,
- * and optionally filter by ignoreFiles patterns.
- */
-async function getPackageCommits(
-  cwd: string,
-  baseline: string | null,
-  pkgPath: string,
-  ignoreFiles: string[],
-): Promise<ConventionalCommit[]> {
-  const rawCommits = await getCommits(cwd, baseline, "HEAD", [pkgPath]);
-  const parsed: ConventionalCommit[] = [];
-
-  for (const raw of rawCommits) {
-    const commit = parseConventionalCommit(raw.hash, raw.message, raw.body);
-    if (commit) parsed.push(commit);
-  }
-
-  const matcher = createIgnoreMatcher(ignoreFiles);
-  if (!matcher) return parsed;
-
-  // Filter: only include commits that touch at least one non-ignored file
-  const filtered: ConventionalCommit[] = [];
-  for (const commit of parsed) {
-    const files = await getChangedFiles(cwd, commit.hash);
-    const pkgFiles = files
-      .filter((f) => pkgPath === "." || f.startsWith(`${pkgPath}/`))
-      .map((f) => (pkgPath === "." ? f : f.slice(pkgPath.length + 1)));
-    if (!allFilesIgnored(pkgFiles, matcher)) {
-      filtered.push(commit);
-    }
-  }
-  return filtered;
 }
 
 /**

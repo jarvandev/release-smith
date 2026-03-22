@@ -1,4 +1,4 @@
-export { getChangedFiles } from "./diff";
+export { getChangedFiles, getChangedFilesForCommits } from "./diff";
 export { execGit } from "./executor";
 export { getCommits, type RawCommit } from "./log";
-export { createTag, getLatestVersionTag, getTags } from "./tag";
+export { createTag, findLatestVersionTag, getLatestVersionTag, getTags } from "./tag";
