@@ -19,7 +19,9 @@ bun run typecheck          # Typecheck all packages
 bun run lint               # Lint + format check (Biome)
 bun run lint:fix           # Auto-fix lint + format issues
 bun run check              # typecheck + lint + test (CI gate)
-bun run build:binary       # Build standalone binaries
+bun run build              # Build CLI (bundled JS)
+bun run build:compile      # Build standalone binary
+bun run generate:schema    # Generate config JSON schema
 ```
 
 ### Single package
@@ -30,19 +32,25 @@ bun test packages/config/  # Test one package
 
 ## Architecture
 
-Monorepo with 5 packages: config, git, core, github, cli.
+Monorepo with 6 packages: config, git, core, github, cli, dev-tools.
+dev-tools is a minimal package that hosts the shared tsconfig.base.json.
 Pipeline: config -> git -> parse -> version -> changelog -> release.
 
 Key modules:
-- `pipeline.ts` -- orchestrates the full flow: tag lookup, commit collection, filtering, bump calculation
-- `version-calculator.ts` -- bump logic, prerelease, rollup from unpublished deps, version groups
-- `changelog-generator.ts` -- markdown generation (only feat/fix/breaking)
-- `releaser.ts` -- file writes (package.json, CHANGELOG.md), git commit/tag
-- `tag-format.ts` -- tag name resolution with `{name}` and `{version}` placeholders
-- `workspace.ts` -- package discovery, config resolution, workspace dep collection
+- `cli/src/pipeline.ts` -- orchestrates the full flow: tag lookup, commit collection, filtering, bump calculation
+- `core/src/version-calculator.ts` -- bump logic, prerelease, rollup from unpublished deps, version groups
+- `core/src/changelog-generator.ts` -- markdown generation (only feat/fix/breaking)
+- `core/src/releaser.ts` -- file writes (package.json, CHANGELOG.md), git commit/tag
+- `core/src/tag-format.ts` -- tag name resolution with `{name}` and `{version}` placeholders
+- `config/src/workspace.ts` -- package discovery, config resolution, workspace dep collection
 
 Config fields: packages (publish/name/from/changelog), tagFormat, branches, groups, prLabels.
 See README.md for full configuration reference and usage documentation.
+
+## CI
+
+GitHub Actions runs `bun run check` (typecheck + lint + test) on PRs.
+No pre-commit hooks; quality gates are enforced in CI.
 
 ## Conventions
 
