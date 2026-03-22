@@ -14,14 +14,35 @@ export async function loadConfig(cwd: string): Promise<RawConfig | null> {
     return null;
   }
 
-  const raw = JSON.parse(text);
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Failed to parse config file ${configPath}: ${error.message}`);
+    }
+    throw error;
+  }
+
+  const KNOWN_KEYS = new Set([
+    "packages",
+    "tagFormat",
+    "branches",
+    "groups",
+    "prLabels",
+    "ignoreFiles",
+  ]);
+  const unknownKeys = Object.keys(raw).filter((k) => !KNOWN_KEYS.has(k));
+  if (unknownKeys.length > 0) {
+    console.warn(`Warning: Unknown config keys: ${unknownKeys.join(", ")}. Check for typos.`);
+  }
 
   return {
-    packages: raw.packages ?? {},
-    branches: raw.branches,
-    tagFormat: raw.tagFormat,
-    groups: raw.groups,
-    prLabels: raw.prLabels,
-    ignoreFiles: raw.ignoreFiles,
+    packages: (raw.packages as RawConfig["packages"]) ?? {},
+    branches: raw.branches as RawConfig["branches"],
+    tagFormat: raw.tagFormat as RawConfig["tagFormat"],
+    groups: raw.groups as RawConfig["groups"],
+    prLabels: raw.prLabels as RawConfig["prLabels"],
+    ignoreFiles: raw.ignoreFiles as RawConfig["ignoreFiles"],
   };
 }

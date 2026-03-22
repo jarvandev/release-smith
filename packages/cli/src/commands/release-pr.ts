@@ -167,8 +167,10 @@ export function parseReleaseMetadata(
       parsed.some(
         (item: Record<string, unknown>) =>
           typeof item.packageName !== "string" ||
+          typeof item.packagePath !== "string" ||
           typeof item.version !== "string" ||
-          typeof item.tagName !== "string",
+          typeof item.tagName !== "string" ||
+          typeof item.changelog !== "string",
       )
     ) {
       return null;

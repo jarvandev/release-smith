@@ -300,6 +300,24 @@ describe("updateVersionRange", () => {
   it("handles workspace: with prerelease version", () => {
     expect(updateVersionRange("workspace:^1.0.0", "2.0.0-beta.0")).toBe("workspace:^2.0.0-beta.0");
   });
+
+  it("throws on complex range with space (>=1.0.0 <2.0.0)", () => {
+    expect(() => updateVersionRange(">=1.0.0 <2.0.0", "2.0.0")).toThrow(
+      /Complex version range.*not supported/,
+    );
+  });
+
+  it("throws on OR range (1.x || 2.x)", () => {
+    expect(() => updateVersionRange("1.x || 2.x", "3.0.0")).toThrow(
+      /Complex version range.*not supported/,
+    );
+  });
+
+  it("throws on workspace: with complex range", () => {
+    expect(() => updateVersionRange("workspace:>=1.0.0 <2.0.0", "2.0.0")).toThrow(
+      /Complex version range.*not supported/,
+    );
+  });
 });
 
 describe("buildCommitMessage", () => {

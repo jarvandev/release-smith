@@ -36,6 +36,40 @@ describe("parseReleaseMetadata", () => {
     expect(parseReleaseMetadata(body)).toBeNull();
   });
 
+  it("returns null when packagePath is missing", () => {
+    const body = `<!-- release-smith:metadata\n${JSON.stringify([
+      { packageName: "pkg", version: "1.0.0", tagName: "v1.0.0", changelog: "log" },
+    ])}\n-->`;
+    expect(parseReleaseMetadata(body)).toBeNull();
+  });
+
+  it("returns null when packagePath is not a string", () => {
+    const body = `<!-- release-smith:metadata\n${JSON.stringify([
+      {
+        packageName: "pkg",
+        packagePath: 123,
+        version: "1.0.0",
+        tagName: "v1.0.0",
+        changelog: "log",
+      },
+    ])}\n-->`;
+    expect(parseReleaseMetadata(body)).toBeNull();
+  });
+
+  it("returns null when changelog is missing", () => {
+    const body = `<!-- release-smith:metadata\n${JSON.stringify([
+      { packageName: "pkg", packagePath: ".", version: "1.0.0", tagName: "v1.0.0" },
+    ])}\n-->`;
+    expect(parseReleaseMetadata(body)).toBeNull();
+  });
+
+  it("returns null when changelog is not a string", () => {
+    const body = `<!-- release-smith:metadata\n${JSON.stringify([
+      { packageName: "pkg", packagePath: ".", version: "1.0.0", tagName: "v1.0.0", changelog: 42 },
+    ])}\n-->`;
+    expect(parseReleaseMetadata(body)).toBeNull();
+  });
+
   it("handles multiple packages", () => {
     const metadata = [
       {

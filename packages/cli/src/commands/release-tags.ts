@@ -28,10 +28,11 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const prNumber = parseInt(args["pr-number"], 10);
-    if (Number.isNaN(prNumber)) {
-      throw new Error(`Invalid PR number: ${args["pr-number"]}`);
+    const prNumberStr = args["pr-number"];
+    if (!/^\d+$/.test(prNumberStr)) {
+      throw new Error(`Invalid PR number: "${prNumberStr}". Must be a positive integer.`);
     }
+    const prNumber = parseInt(prNumberStr, 10);
 
     const cwd = args.cwd;
     const token = process.env.GITHUB_TOKEN ?? null;

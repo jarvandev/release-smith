@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, jest, spyOn } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,10 +46,11 @@ describe("loadConfig", () => {
     expect(result?.packages).toEqual({});
   });
 
-  it("throws on invalid JSON", async () => {
+  it("throws on invalid JSON with file path in error message", async () => {
     await writeFile(join(tempDir, "release-smith.json"), "{ invalid json }");
 
-    await expect(loadConfig(tempDir)).rejects.toThrow();
+    await expect(loadConfig(tempDir)).rejects.toThrow(/Failed to parse config file/);
+    await expect(loadConfig(tempDir)).rejects.toThrow(/release-smith\.json/);
   });
 
   it("loads branches config", async () => {
@@ -107,6 +108,40 @@ describe("loadConfig", () => {
     await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
     const result = await loadConfig(tempDir);
     expect(result?.ignoreFiles).toEqual(["**/__tests__/**", "**/*.md"]);
+  });
+
+  it("warns on unknown config keys", async () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+    const config = {
+      packages: {},
+      tagformat: "v{version}",
+      unknownKey: true,
+    };
+    await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
+
+    await loadConfig(tempDir);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const msg = warnSpy.mock.calls[0][0] as string;
+    expect(msg).toContain("tagformat");
+    expect(msg).toContain("unknownKey");
+    warnSpy.mockRestore();
+  });
+
+  it("does not warn when all keys are known", async () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+    const config = {
+      packages: {},
+      tagFormat: "v{version}",
+      branches: {},
+      groups: {},
+      prLabels: [],
+      ignoreFiles: [],
+    };
+    await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
+
+    await loadConfig(tempDir);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 
   it("loads per-package ignoreFiles", async () => {

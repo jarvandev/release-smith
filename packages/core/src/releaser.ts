@@ -61,6 +61,12 @@ export function updateVersionRange(current: string, newVersion: string): string 
 }
 
 function replaceVersion(range: string, newVersion: string): string {
+  const trimmed = range.trim();
+  if (/\s/.test(trimmed) || trimmed.includes("||")) {
+    throw new Error(
+      `Complex version range "${range}" is not supported for automatic updates. Please update manually.`,
+    );
+  }
   // Extract everything before the first digit as the range prefix
   const prefix = range.match(/^[^\d]*/)?.[0] ?? "";
   return `${prefix}${newVersion}`;
