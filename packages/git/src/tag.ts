@@ -64,6 +64,19 @@ export async function getLatestVersionTag(cwd: string, tagPrefix: string): Promi
   return findLatestVersionTag(tags, tagPrefix);
 }
 
+export async function tagExists(cwd: string, tagName: string): Promise<boolean> {
+  const tags = await getTags(cwd);
+  return tags.includes(tagName);
+}
+
+export async function getTagCommit(cwd: string, tagName: string): Promise<string | null> {
+  try {
+    return await execGit(["rev-parse", tagName], cwd);
+  } catch {
+    return null;
+  }
+}
+
 export async function createTag(cwd: string, tag: string): Promise<void> {
   await execGit(["tag", tag], cwd);
 }

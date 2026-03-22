@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTag, findLatestVersionTag, getLatestVersionTag, getTags } from "../src/tag";
+import {
+  createTag,
+  findLatestVersionTag,
+  getLatestVersionTag,
+  getTagCommit,
+  getTags,
+  tagExists,
+} from "../src/tag";
 
 async function initRepoWithCommit(dir: string) {
   const run = (args: string[]) => Bun.spawn(["git", ...args], { cwd: dir }).exited;
@@ -159,10 +166,49 @@ describe("findLatestVersionTag", () => {
   });
 
   it("produces same result as getLatestVersionTag", async () => {
-    // Verify that findLatestVersionTag is functionally equivalent to
-    // getLatestVersionTag when given the same tag list
     const tags = ["v1.0.0", "v2.0.0", "v1.5.0", "other-tag", "v3.0.0-beta.0"];
     expect(findLatestVersionTag(tags, "v")).toBe("v2.0.0");
+  });
+});
+
+describe("tagExists", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-tag-"));
+    await initRepoWithCommit(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("returns false when tag does not exist", async () => {
+    expect(await tagExists(tempDir, "v1.0.0")).toBe(false);
+  });
+
+  it("returns true when tag exists", async () => {
+    await Bun.spawn(["git", "tag", "v1.0.0"], { cwd: tempDir }).exited;
+    expect(await tagExists(tempDir, "v1.0.0")).toBe(true);
+  });
+});
+
+describe("getTagCommit", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-tag-"));
+    await initRepoWithCommit(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  it("returns null for non-existent tag", async () => {
+    expect(await getTagCommit(tempDir, "v999.0.0")).toBeNull();
+  });
+
+  it("returns the commit hash for an existing tag", async () => {
+    await Bun.spawn(["git", "tag", "v1.0.0"], { cwd: tempDir }).exited;
+    const commit = await getTagCommit(tempDir, "v1.0.0");
+    expect(commit).toMatch(/^[0-9a-f]{40}$/);
   });
 });
 

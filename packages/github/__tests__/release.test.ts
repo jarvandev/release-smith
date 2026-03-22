@@ -48,7 +48,15 @@ describe("createGitHubRelease", () => {
   it("creates release and returns URL on success", async () => {
     const originalFetch = globalThis.fetch;
     let capturedBody: Record<string, unknown> = {};
-    globalThis.fetch = async (_input: string | URL | Request, init?: RequestInit) => {
+    let callCount = 0;
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      callCount++;
+      const url = typeof input === "string" ? input : input.toString();
+      // First call: GET to check existing release -> 404
+      if (init?.method === "GET" && url.includes("/releases/tags/")) {
+        return new Response("Not found", { status: 404 });
+      }
+      // Second call: POST to create release
       capturedBody = JSON.parse(init?.body as string);
       return new Response(JSON.stringify({ html_url: "https://github.com/u/r/releases/v1.0.0" }), {
         status: 201,
@@ -68,6 +76,36 @@ describe("createGitHubRelease", () => {
       expect(capturedBody.tag_name).toBe("v1.0.0");
       expect(capturedBody.name).toBe("v1.0.0");
       expect(capturedBody.body).toContain("## Changes");
+      expect(callCount).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("skips when release already exists for tag", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      // GET to check existing release -> 200 (exists)
+      if (init?.method === "GET" && url.includes("/releases/tags/")) {
+        return new Response(
+          JSON.stringify({ html_url: "https://github.com/u/r/releases/tag/v1.0.0" }),
+          { status: 200 },
+        );
+      }
+      throw new Error("Should not reach POST when release already exists");
+    };
+    try {
+      const result = await createGitHubRelease({
+        owner: "user",
+        repo: "repo",
+        tag: "v1.0.0",
+        name: "v1.0.0",
+        body: "## Changes\n\n- feature",
+        token: "test-token",
+      });
+      expect(result.skipped).toBe(true);
+      expect(result.reason).toContain("already exists");
     } finally {
       globalThis.fetch = originalFetch;
     }
