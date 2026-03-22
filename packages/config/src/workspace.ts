@@ -14,9 +14,10 @@ export async function discoverPackages(
   // Single-package project
   if (!rootPkg.workspaces) {
     const pkgIgnoreFiles = config?.packages?.["."]?.ignoreFiles ?? [];
+    const dirName = cwd.split("/").pop() || "unknown";
     return [
       {
-        name: rootPkg.name ?? "unknown",
+        name: rootPkg.name ?? dirName,
         path: ".",
         publish: true,
         changelogPath: join(cwd, "CHANGELOG.md"),
@@ -52,6 +53,7 @@ export async function discoverPackages(
 
   // Second pass: resolve each package
   const resolved: ResolvedPackage[] = [];
+  const packageByName = new Map<string, string>();
   for (const { dir, relPath, pkg } of pkgDataList) {
     const configEntry = config?.packages?.[relPath];
     const isPrivate = pkg.private === true;
@@ -74,9 +76,25 @@ export async function discoverPackages(
     const extra = configEntry?.extraDeps ?? [];
     const workspaceDeps = [...new Set([...autoDetected, ...extra])];
 
+    const dirName = relPath.split("/").pop() || relPath;
+    const name = configEntry?.name ?? pkg.name ?? dirName;
+    if (!pkg.name && !configEntry?.name) {
+      console.warn(
+        `Warning: Package at "${relPath}" has no name in package.json, using directory name "${dirName}" as fallback.`,
+      );
+    }
+
+    if (packageByName.has(name)) {
+      throw new Error(
+        `Duplicate package name "${name}" found in "${packageByName.get(name)}" and "${relPath}". ` +
+          "Add a unique name in package.json or use the config name override.",
+      );
+    }
+    packageByName.set(name, relPath);
+
     const pkgIgnoreFiles = configEntry?.ignoreFiles ?? [];
     resolved.push({
-      name: configEntry?.name ?? pkg.name ?? "unknown",
+      name,
       path: relPath,
       publish,
       changelogPath,

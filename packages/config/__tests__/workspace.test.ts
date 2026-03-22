@@ -370,6 +370,49 @@ describe("discoverPackages", () => {
     expect(result[0].ignoreFiles).toEqual([]);
   });
 
+  it("uses directory name as fallback when package.json has no name (monorepo)", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/my-lib"), {
+      version: "1.0.0",
+    });
+
+    const result = await discoverPackages(tempDir, null);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("my-lib");
+  });
+
+  it("uses directory name as fallback when package.json has no name (single-package)", async () => {
+    await createPackage(tempDir, {
+      version: "1.0.0",
+    });
+
+    const result = await discoverPackages(tempDir, null);
+    expect(result).toHaveLength(1);
+    // Should use the last segment of tempDir path instead of "unknown"
+    expect(result[0].name).not.toBe("unknown");
+  });
+
+  it("throws on duplicate package names from directory fallback", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["apps/*", "libs/*"],
+    });
+    // Two packages named "core" in different directories
+    await createPackage(join(tempDir, "apps/core"), {
+      version: "1.0.0",
+    });
+    await createPackage(join(tempDir, "libs/core"), {
+      version: "1.0.0",
+    });
+
+    await expect(discoverPackages(tempDir, null)).rejects.toThrow("Duplicate package name");
+  });
+
   it("applies global ignoreFiles to single-package project", async () => {
     await createPackage(tempDir, {
       name: "my-app",
