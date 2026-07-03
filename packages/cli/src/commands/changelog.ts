@@ -1,4 +1,4 @@
-import { generateChangelog } from "@release-smith/core";
+import { formatTagName, generateChangelog } from "@release-smith/core";
 import { defineCommand } from "citty";
 import { runPipeline } from "../pipeline";
 
@@ -8,6 +8,11 @@ export default defineCommand({
     description: "Generate changelog only (no release)",
   },
   args: {
+    json: {
+      type: "boolean",
+      description: "Output machine-readable JSON",
+      default: false,
+    },
     cwd: {
       type: "string",
       description: "Specify working directory",
@@ -15,8 +20,19 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const { bumps, isMonorepo } = await runPipeline(args.cwd);
+    const { bumps, isMonorepo, tagFormat } = await runPipeline(args.cwd);
     const date = new Date().toISOString().slice(0, 10);
+
+    if (args.json) {
+      const packages = bumps.map((bump) => ({
+        name: bump.packageName,
+        version: bump.newVersion,
+        tagName: formatTagName(tagFormat, bump.packageName, bump.newVersion),
+        changelog: generateChangelog(bump, date, null),
+      }));
+      console.log(JSON.stringify({ packages }));
+      return;
+    }
 
     if (bumps.length === 0) {
       console.log("No changes to generate changelog for.");
