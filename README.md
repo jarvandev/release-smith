@@ -292,9 +292,67 @@ Create `release-smith.json` with auto-detected workspace packages. Sets `from` t
 
 Show pending version bumps and their commits. Useful for previewing what the next release will include.
 
+| Flag | Description |
+|------|-------------|
+| `--json` | Output machine-readable JSON |
+| `--cwd <dir>` | Working directory |
+
+With `--json`, stdout contains a single JSON document:
+
+```json
+{
+  "packages": [
+    {
+      "name": "@myapp/core",
+      "displayName": "@myapp/core",
+      "path": "packages/core",
+      "currentVersion": "1.0.0",
+      "nextVersion": "1.1.0",
+      "bumpLevel": "minor",
+      "tagName": "@myapp/core@1.1.0",
+      "propagated": false,
+      "commits": [
+        {
+          "hash": "abc123...",
+          "type": "feat",
+          "scope": "api",
+          "description": "add endpoint",
+          "breaking": false
+        }
+      ]
+    }
+  ]
+}
+```
+
 ### `release-smith changelog`
 
 Generate and preview changelog output without making any changes.
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output machine-readable JSON |
+| `--cwd <dir>` | Working directory |
+
+With `--json`, stdout contains a single JSON document:
+
+```json
+{
+  "packages": [
+    {
+      "name": "@myapp/core",
+      "displayName": "@myapp/core",
+      "version": "1.1.0",
+      "tagName": "@myapp/core@1.1.0",
+      "changelog": "## [1.1.0] - 2026-07-03\n\n### Features\n..."
+    }
+  ]
+}
+```
+
+`name` is the `package.json` name; `displayName` reflects the config `name` override (they match when no override is set). Tags are derived from `displayName`.
+
+When there is nothing to release, both commands emit `{"packages": []}`.
 
 ### `release-smith release`
 
