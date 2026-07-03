@@ -318,6 +318,21 @@ describe("updateVersionRange", () => {
       /Complex version range.*not supported/,
     );
   });
+
+  it("leaves bare wildcard ranges unchanged", () => {
+    expect(updateVersionRange("*", "1.3.0")).toBeNull();
+    expect(updateVersionRange("x", "1.3.0")).toBeNull();
+  });
+
+  it("leaves partial wildcard ranges unchanged", () => {
+    expect(updateVersionRange("1.x", "1.3.0")).toBeNull();
+    expect(updateVersionRange("1.2.x", "1.3.0")).toBeNull();
+  });
+
+  it("leaves dist-tag ranges unchanged", () => {
+    expect(updateVersionRange("latest", "1.3.0")).toBeNull();
+    expect(updateVersionRange("next", "1.3.0")).toBeNull();
+  });
 });
 
 describe("buildCommitMessage", () => {

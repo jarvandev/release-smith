@@ -671,4 +671,44 @@ describe("pipeline integration", () => {
     expect(result.bumps).toHaveLength(1);
     expect(result.bumps[0].newVersion).toBe("1.1.0");
   });
+
+  it("shared unpublished dep uses each dependent's own baseline", async () => {
+    // aaa and bbb both roll up @test/utils. aaa already released the utils
+    // feat (tag after the commit); bbb has not (tag before the commit).
+    await setupMonorepo(tempDir, [
+      {
+        name: "@test/aaa",
+        path: "packages/aaa",
+        version: "2.0.0",
+        deps: { "@test/utils": "workspace:*" },
+      },
+      {
+        name: "@test/bbb",
+        path: "packages/bbb",
+        deps: { "@test/utils": "workspace:*" },
+      },
+      { name: "@test/utils", path: "packages/utils", private: true },
+    ]);
+    await tag(tempDir, "@test/bbb@1.0.0");
+    await commit(tempDir, "feat: new util", "packages/utils/src/index.ts");
+    await tag(tempDir, "@test/aaa@2.0.0");
+
+    const result = await runPipeline(tempDir);
+    const names = result.bumps.map((b) => b.packageName);
+    expect(names).not.toContain("@test/aaa");
+    const bbb = result.bumps.find((b) => b.packageName === "@test/bbb")!;
+    expect(bbb.newVersion).toBe("1.1.0");
+    expect(bbb.commits).toHaveLength(1);
+  });
+
+  it("prerelease without a stable tag continues the sequence instead of drifting", async () => {
+    await setupMonorepo(tempDir, [
+      { name: "@test/core", path: "packages/core", version: "1.1.0-beta.0" },
+    ]);
+    await commit(tempDir, "feat: more work", "packages/core/src/index.ts");
+
+    const result = await runPipeline(tempDir, { prerelease: "beta" });
+    expect(result.bumps).toHaveLength(1);
+    expect(result.bumps[0].newVersion).toBe("1.1.0-beta.1");
+  });
 });

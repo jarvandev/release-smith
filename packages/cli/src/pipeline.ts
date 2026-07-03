@@ -88,35 +88,51 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
       if (tag) {
         const prefix = resolveTagPrefix(tagFormat, pkg.name);
         lastStableVersions.set(pkg.path, tag.slice(prefix.length));
-      } else {
-        // No stable tag: strip prerelease suffix from package.json version
-        lastStableVersions.set(pkg.path, pkg.version.replace(/-.*$/, ""));
       }
+      // No stable tag: leave the entry unset so bumpPrerelease continues
+      // an in-progress sequence instead of re-deriving an inflated target.
     }
     prereleaseOpts = { preid, lastStableVersions };
   }
 
-  // Collect all paths that need commit lookups (direct + unpub deps)
-  // so we can batch-fetch changed files for ignoreFiles filtering.
+  // Collect all (path, baseline) pairs that need commit lookups so we can
+  // batch-fetch changed files for ignoreFiles filtering. An unpublished dep
+  // shared by several published packages is queried once per distinct
+  // dependent baseline: each dependent must see the dep's commits since its
+  // own last release, not the first dependent's.
   interface PathQuery {
     baseline: string | null;
     pkgPath: string;
     ignoreFiles: string[];
   }
+  const queryKey = (path: string, baseline: string | null) => `${path}\u0000${baseline ?? ""}`;
   const pathQueries = new Map<string, PathQuery>();
+  const baselineByPath = new Map<string, string | null>();
 
   for (const pkg of sorted) {
     if (!pkg.publish) continue;
     const baseline = packageTags.get(pkg.path) ?? pkg.from ?? null;
+    baselineByPath.set(pkg.path, baseline);
 
     // Direct package path
-    pathQueries.set(pkg.path, { baseline, pkgPath: pkg.path, ignoreFiles: pkg.ignoreFiles });
+    pathQueries.set(queryKey(pkg.path, baseline), {
+      baseline,
+      pkgPath: pkg.path,
+      ignoreFiles: pkg.ignoreFiles,
+    });
 
-    // Unpublished dep paths
+    // Unpublished dep paths, cut off at this dependent's baseline (falling
+    // back to the dep's own "from" when the dependent has none)
     const unpubDeps = collectUnpublishedDeps(pkg.name, packageByName);
     for (const dep of unpubDeps) {
-      if (!pathQueries.has(dep.path)) {
-        pathQueries.set(dep.path, { baseline, pkgPath: dep.path, ignoreFiles: dep.ignoreFiles });
+      const depBaseline = baseline ?? dep.from ?? null;
+      const key = queryKey(dep.path, depBaseline);
+      if (!pathQueries.has(key)) {
+        pathQueries.set(key, {
+          baseline: depBaseline,
+          pkgPath: dep.path,
+          ignoreFiles: dep.ignoreFiles,
+        });
       }
     }
   }
@@ -175,14 +191,16 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
   for (const pkg of sorted) {
     if (!pkg.publish) continue;
 
-    const directCommits = filteredCommitsByPath.get(pkg.path) ?? [];
+    const baseline = baselineByPath.get(pkg.path) ?? null;
+    const directCommits = filteredCommitsByPath.get(queryKey(pkg.path, baseline)) ?? [];
 
     // Collect rollup commits from unpublished deps
     const unpubDeps = collectUnpublishedDeps(pkg.name, packageByName);
     const rollupHashes = new Set<string>();
     const rollupCommits: ConventionalCommit[] = [];
     for (const dep of unpubDeps) {
-      const depCommits = filteredCommitsByPath.get(dep.path) ?? [];
+      const depCommits =
+        filteredCommitsByPath.get(queryKey(dep.path, baseline ?? dep.from ?? null)) ?? [];
       for (const c of depCommits) {
         if (!rollupHashes.has(c.hash)) {
           rollupHashes.add(c.hash);
@@ -233,7 +251,7 @@ function makeBump(
   const newVersion = prerelease
     ? bumpPrerelease(
         pkg.version,
-        prerelease.lastStableVersions.get(pkg.path) ?? pkg.version,
+        prerelease.lastStableVersions.get(pkg.path) ?? null,
         level,
         prerelease.preid,
       )
