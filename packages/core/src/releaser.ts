@@ -138,6 +138,51 @@ export async function applyReleaseChanges(options: {
 }
 
 /**
+ * Fail when tracked files have uncommitted changes. Untracked files are
+ * allowed: release commits stage an explicit file list, so they cannot be
+ * swept in, and blocking on stray build artifacts would be needless friction.
+ */
+export async function ensureCleanWorkingTree(cwd: string): Promise<void> {
+  const status = await execGit(["status", "--porcelain", "--untracked-files=no"], cwd);
+  if (status.trim()) {
+    throw new Error(
+      `Working tree has uncommitted changes. Commit or stash them before releasing:\n${status.trim()}`,
+    );
+  }
+}
+
+/**
+ * Stage exactly the files a release writes: every workspace package.json
+ * (dependency ranges may change anywhere), the changelogs of released
+ * packages, and the lockfile.
+ */
+export async function stageReleaseChanges(
+  cwd: string,
+  packages: ResolvedPackage[],
+  bumps: VersionBump[],
+): Promise<void> {
+  const bumpedPaths = new Set(bumps.map((b) => b.packagePath));
+  const paths = new Set<string>();
+  for (const pkg of packages) {
+    paths.add(join(cwd, pkg.path, "package.json"));
+    if (bumpedPaths.has(pkg.path)) paths.add(pkg.changelogPath);
+  }
+  for (const [file] of LOCK_FILES) {
+    paths.add(join(cwd, file));
+  }
+  const existing: string[] = [];
+  for (const path of paths) {
+    try {
+      await access(path);
+      existing.push(path);
+    } catch {
+      // Skip files that do not exist (e.g. absent lockfiles)
+    }
+  }
+  await execGit(["add", "--", ...existing], cwd);
+}
+
+/**
  * Build commit message from release results.
  * Requires at least one result.
  */
@@ -216,6 +261,8 @@ export async function executeRelease(options: {
     }));
   }
 
+  await ensureCleanWorkingTree(cwd);
+
   const results = await applyReleaseChanges({
     cwd,
     bumps,
@@ -224,7 +271,7 @@ export async function executeRelease(options: {
     tagFormat: options.tagFormat,
   });
 
-  await execGit(["add", "-A"], cwd);
+  await stageReleaseChanges(cwd, packages, bumps);
   await execGit(["commit", "-m", buildCommitMessage(results)], cwd);
   await createReleaseTags(cwd, results, false);
 

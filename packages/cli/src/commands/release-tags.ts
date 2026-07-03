@@ -57,6 +57,20 @@ export default defineCommand({
       throw new Error(`PR #${prNumber} has no body. Cannot extract release metadata.`);
     }
 
+    // Tags are created on HEAD; anything other than the PR's merge commit
+    // (e.g. a synthetic PR merge ref, or main after newer pushes) would
+    // silently tag the wrong tree.
+    const head = (await execGit(["rev-parse", "HEAD"], cwd)).trim();
+    if (pr.merge_commit_sha && head !== pr.merge_commit_sha) {
+      throw new Error(
+        `HEAD (${head}) does not match the merge commit of PR #${prNumber} ` +
+          `(${pr.merge_commit_sha}). Check out the merge commit before tagging, ` +
+          `e.g. in GitHub Actions: actions/checkout with ` +
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax
+          "ref: ${{ github.event.pull_request.merge_commit_sha }}.",
+      );
+    }
+
     const metadata = parseReleaseMetadata(pr.body);
     if (!metadata || metadata.length === 0) {
       throw new Error(
