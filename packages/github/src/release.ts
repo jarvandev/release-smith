@@ -1,4 +1,4 @@
-import { githubRequest } from "./client";
+import { GitHubApiError, githubRequest } from "./client";
 
 export interface CreateReleaseOptions {
   owner: string;
@@ -16,11 +16,11 @@ export interface CreateReleaseResult {
 }
 
 export function parseGitHubUrl(remoteUrl: string): { owner: string; repo: string } | null {
-  const httpsMatch = remoteUrl.match(/github\.com\/([^/]+)\/([^/.]+)(?:\.git)?$/);
-  if (httpsMatch?.[1] && httpsMatch[2]) return { owner: httpsMatch[1], repo: httpsMatch[2] };
-  const sshMatch = remoteUrl.match(/github\.com:([^/]+)\/([^/.]+)(?:\.git)?$/);
-  if (sshMatch?.[1] && sshMatch[2]) return { owner: sshMatch[1], repo: sshMatch[2] };
-  return null;
+  // Repo names may contain dots (e.g. next.js); only a final ".git"
+  // suffix and trailing slash are stripped.
+  const match = remoteUrl.trim().match(/github\.com[/:]([^/:]+)\/(.+?)(?:\.git)?\/?$/);
+  if (!match?.[1] || !match[2] || match[2].includes("/")) return null;
+  return { owner: match[1], repo: match[2] };
 }
 
 export async function createGitHubRelease(
@@ -29,11 +29,12 @@ export async function createGitHubRelease(
   if (!options.token)
     return { skipped: true, reason: "GITHUB_TOKEN not set. Skipping GitHub Release creation." };
 
-  // Check if release already exists for this tag
+  // Check if release already exists for this tag. Tags may contain "/"
+  // (scoped package names), so the path segment must be encoded.
   try {
     const existing = await githubRequest(
       "GET",
-      `/repos/${options.owner}/${options.repo}/releases/tags/${options.tag}`,
+      `/repos/${options.owner}/${options.repo}/releases/tags/${encodeURIComponent(options.tag)}`,
       { token: options.token },
     );
     const data = (await existing.json()) as { html_url: string };
@@ -41,8 +42,10 @@ export async function createGitHubRelease(
       skipped: true,
       reason: `GitHub Release for tag ${options.tag} already exists: ${data.html_url}`,
     };
-  } catch {
-    // Release doesn't exist, proceed to create
+  } catch (error) {
+    // Only 404 means the release doesn't exist; auth or rate-limit
+    // failures must not be mistaken for that.
+    if (!(error instanceof GitHubApiError) || error.status !== 404) throw error;
   }
 
   const response = await githubRequest(
