@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { ResolvedPackage } from "@release-smith/config";
 import { createTag, execGit, getTagCommit, tagExists } from "@release-smith/git";
 import { createGitHubRelease, parseGitHubUrl } from "@release-smith/github";
+import semver from "semver";
 import { generateChangelog, insertChangelog } from "./changelog-generator";
 import { formatTagName, resolveTagFormat } from "./tag-format";
 import type { ReleaseResult, VersionBump } from "./types";
@@ -47,7 +48,8 @@ export async function updateWorkspaceDeps(
  * Only handles simple ranges (^x.y.z, ~x.y.z, >=x.y.z, x.y.z).
  * Complex ranges like ">=1.0.0 <2.0.0" or "1.x || 2.x" are not supported.
  *
- * Returns null if no update is needed (e.g., workspace:* auto-resolves).
+ * Returns null if no update is needed (e.g., workspace:* auto-resolves,
+ * wildcard and dist-tag ranges float on purpose).
  */
 export function updateVersionRange(current: string, newVersion: string): string | null {
   if (current.startsWith("workspace:")) {
@@ -55,12 +57,13 @@ export function updateVersionRange(current: string, newVersion: string): string 
     // Auto-resolving workspace ranges: *, ^, ~ (no version number)
     // These are resolved by the package manager at publish time
     if (range === "*" || range === "^" || range === "~") return null;
-    return `workspace:${replaceVersion(range, newVersion)}`;
+    const replaced = replaceVersion(range, newVersion);
+    return replaced === null ? null : `workspace:${replaced}`;
   }
   return replaceVersion(current, newVersion);
 }
 
-function replaceVersion(range: string, newVersion: string): string {
+function replaceVersion(range: string, newVersion: string): string | null {
   const trimmed = range.trim();
   if (/\s/.test(trimmed) || trimmed.includes("||")) {
     throw new Error(
@@ -69,6 +72,9 @@ function replaceVersion(range: string, newVersion: string): string {
   }
   // Extract everything before the first digit as the range prefix
   const prefix = range.match(/^[^\d]*/)?.[0] ?? "";
+  // Ranges without a concrete x.y.z base (*, 1.x, dist-tags like "latest")
+  // intentionally float; rewriting them would pin or corrupt the range.
+  if (!semver.valid(range.slice(prefix.length))) return null;
   return `${prefix}${newVersion}`;
 }
 
@@ -103,7 +109,7 @@ export async function applyReleaseChanges(options: {
 
   for (const bump of bumps) {
     const changelog = generateChangelog(bump, date, repoUrl);
-    const tagName = formatTagName(format, bump.packageName, bump.newVersion);
+    const tagName = formatTagName(format, bump.displayName, bump.newVersion);
 
     const pkgDir = join(cwd, bump.packagePath);
     await updatePackageVersion(pkgDir, bump.newVersion);
@@ -114,7 +120,7 @@ export async function applyReleaseChanges(options: {
     await writeFile(pkg.changelogPath, newChangelog);
 
     results.push({
-      packageName: bump.packageName,
+      packageName: bump.displayName,
       packagePath: bump.packagePath,
       version: bump.newVersion,
       changelog,
@@ -129,6 +135,51 @@ export async function applyReleaseChanges(options: {
   await updateLockFile(cwd);
 
   return results;
+}
+
+/**
+ * Fail when tracked files have uncommitted changes. Untracked files are
+ * allowed: release commits stage an explicit file list, so they cannot be
+ * swept in, and blocking on stray build artifacts would be needless friction.
+ */
+export async function ensureCleanWorkingTree(cwd: string): Promise<void> {
+  const status = await execGit(["status", "--porcelain", "--untracked-files=no"], cwd);
+  if (status.trim()) {
+    throw new Error(
+      `Working tree has uncommitted changes. Commit or stash them before releasing:\n${status.trim()}`,
+    );
+  }
+}
+
+/**
+ * Stage exactly the files a release writes: every workspace package.json
+ * (dependency ranges may change anywhere), the changelogs of released
+ * packages, and the lockfile.
+ */
+export async function stageReleaseChanges(
+  cwd: string,
+  packages: ResolvedPackage[],
+  bumps: VersionBump[],
+): Promise<void> {
+  const bumpedPaths = new Set(bumps.map((b) => b.packagePath));
+  const paths = new Set<string>();
+  for (const pkg of packages) {
+    paths.add(join(cwd, pkg.path, "package.json"));
+    if (bumpedPaths.has(pkg.path)) paths.add(pkg.changelogPath);
+  }
+  for (const [file] of LOCK_FILES) {
+    paths.add(join(cwd, file));
+  }
+  const existing: string[] = [];
+  for (const path of paths) {
+    try {
+      await access(path);
+      existing.push(path);
+    } catch {
+      // Skip files that do not exist (e.g. absent lockfiles)
+    }
+  }
+  await execGit(["add", "--", ...existing], cwd);
 }
 
 /**
@@ -202,13 +253,15 @@ export async function executeRelease(options: {
       /* no remote */
     }
     return bumps.map((bump) => ({
-      packageName: bump.packageName,
+      packageName: bump.displayName,
       packagePath: bump.packagePath,
       version: bump.newVersion,
       changelog: generateChangelog(bump, date, repoUrl),
-      tagName: formatTagName(format, bump.packageName, bump.newVersion),
+      tagName: formatTagName(format, bump.displayName, bump.newVersion),
     }));
   }
+
+  await ensureCleanWorkingTree(cwd);
 
   const results = await applyReleaseChanges({
     cwd,
@@ -218,7 +271,7 @@ export async function executeRelease(options: {
     tagFormat: options.tagFormat,
   });
 
-  await execGit(["add", "-A"], cwd);
+  await stageReleaseChanges(cwd, packages, bumps);
   await execGit(["commit", "-m", buildCommitMessage(results)], cwd);
   await createReleaseTags(cwd, results, false);
 

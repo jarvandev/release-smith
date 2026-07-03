@@ -144,3 +144,34 @@ describe("getChangedFilesForCommits", () => {
     expect(files).toContain("README.md");
   });
 });
+
+describe("non-ascii filenames", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-diff-utf8-"));
+    await initRepo(tempDir);
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  async function commitNonAsciiFile(): Promise<string> {
+    await mkdir(join(tempDir, "packages/core"), { recursive: true });
+    await writeFile(join(tempDir, "packages/core/说明.md"), "content");
+    await Bun.spawn(["git", "add", "."], { cwd: tempDir }).exited;
+    await Bun.spawn(["git", "commit", "-m", "docs: add file"], { cwd: tempDir }).exited;
+    return getLatestHash(tempDir);
+  }
+
+  it("getChangedFiles returns literal utf-8 paths, not quoted octal escapes", async () => {
+    const hash = await commitNonAsciiFile();
+    const files = await getChangedFiles(tempDir, hash);
+    expect(files).toContain("packages/core/说明.md");
+  });
+
+  it("getChangedFilesForCommits returns literal utf-8 paths, not quoted octal escapes", async () => {
+    const hash = await commitNonAsciiFile();
+    const result = await getChangedFilesForCommits(tempDir, [hash]);
+    expect(result.get(hash) ?? []).toContain("packages/core/说明.md");
+  });
+});

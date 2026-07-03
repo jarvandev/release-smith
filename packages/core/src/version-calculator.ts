@@ -12,6 +12,20 @@ export interface PrereleaseOptions {
   lastStableVersions: Map<string, string>;
 }
 
+/**
+ * Continue a `<base>-<preid>.<n>` sequence by incrementing the trailing
+ * number. String prefix matching handles preids that semver parses into
+ * multiple or numeric identifiers (e.g. "beta.x", "1"), which
+ * `semver.inc(..., "prerelease", preid)` cannot round-trip.
+ */
+function continuePrereleaseSequence(current: string, base: string, preid: string): string | null {
+  const prefix = `${base}-${preid}.`;
+  if (!current.startsWith(prefix)) return null;
+  const sequence = current.slice(prefix.length);
+  if (!/^\d+$/.test(sequence)) return null;
+  return `${prefix}${Number(sequence) + 1}`;
+}
+
 export function bumpVersion(current: string, level: BumpLevel): string {
   const result = semver.inc(current, level);
   if (!result) {
@@ -30,21 +44,36 @@ export function bumpVersion(current: string, level: BumpLevel): string {
  */
 export function bumpPrerelease(
   current: string,
-  lastStableVersion: string,
+  lastStableVersion: string | null,
   level: BumpLevel,
   preid: string,
 ): string {
+  const parsed = semver.parse(current);
+  const currentBase = parsed ? `${parsed.major}.${parsed.minor}.${parsed.patch}` : current;
+
+  // No stable tag exists: the true last stable version is unknown, so an
+  // in-progress prerelease keeps its base instead of re-deriving a target
+  // (which would inflate the version on every run).
+  if (lastStableVersion === null) {
+    if (parsed && parsed.prerelease.length > 0) {
+      const continued = continuePrereleaseSequence(current, currentBase, preid);
+      return continued ?? `${currentBase}-${preid}.0`;
+    }
+    const target = semver.inc(current, level);
+    if (!target) {
+      throw new Error(`Failed to bump version "${current}" by "${level}"`);
+    }
+    return `${target}-${preid}.0`;
+  }
+
   const targetStable = semver.inc(lastStableVersion, level);
   if (!targetStable) {
     throw new Error(`Failed to bump version "${lastStableVersion}" by "${level}"`);
   }
 
-  const parsed = semver.parse(current);
-  if (parsed && parsed.prerelease.length > 0 && parsed.prerelease[0] === preid) {
-    const currentBase = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
-    if (currentBase === targetStable) {
-      return semver.inc(current, "prerelease", preid)!;
-    }
+  if (parsed && parsed.prerelease.length > 0 && currentBase === targetStable) {
+    const continued = continuePrereleaseSequence(current, currentBase, preid);
+    if (continued) return continued;
   }
 
   return `${targetStable}-${preid}.0`;
@@ -105,15 +134,17 @@ export function applyVersionGroups(
     // bump from that version to ensure consistency
     for (const pkg of groupPackages) {
       if (bumpByName.has(pkg.name)) continue;
-      const stable = pkg.version.replace(/-.*$/, "");
+      // Bump from the actual version: semver.inc graduates prerelease
+      // versions to their base (1.1.0-beta.1 + minor -> 1.1.0) instead of
+      // inflating past it.
       const wouldBe = prerelease
         ? bumpPrerelease(
             pkg.version,
-            prerelease.lastStableVersions.get(pkg.path) ?? stable,
+            prerelease.lastStableVersions.get(pkg.path) ?? null,
             highestLevel,
             prerelease.preid,
           )
-        : bumpVersion(stable, highestLevel);
+        : bumpVersion(pkg.version, highestLevel);
       if (semver.gt(wouldBe, finalVersion)) {
         finalVersion = wouldBe;
       }
@@ -132,6 +163,7 @@ export function applyVersionGroups(
       const newBump: VersionBump = {
         packagePath: pkg.path,
         packageName: pkg.name,
+        displayName: pkg.displayName,
         currentVersion: pkg.version,
         newVersion: finalVersion,
         level: highestLevel,

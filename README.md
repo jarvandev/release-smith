@@ -101,7 +101,7 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 |-------|------|-------------|
 | `packages` | `Record<string, PackageConfig>` | Map of package path to config. Listed = managed; unlisted = `publish: false` |
 | `packages.*.publish` | `boolean` | Whether to publish this package (default: `true` if listed) |
-| `packages.*.name` | `string` | Override package name for tags/changelogs/commits (default: `package.json` name) |
+| `packages.*.name` | `string` | Display name override for tags/changelogs/commits (default: `package.json` name). Dependency tracking and `groups` always use the `package.json` name |
 | `packages.*.from` | `string` | Starting commit hash. Only commits after this are considered for the first release |
 | `packages.*.changelog` | `string` | Custom changelog file path (default: `<packageDir>/CHANGELOG.md`) |
 | `packages.*.ignoreFiles` | `string[]` | Per-package glob patterns for files to ignore (merged with global, relative to package dir) |
@@ -219,6 +219,8 @@ The `from` field sets a starting commit -- only commits after this hash are cons
 
 ## Release Modes
 
+Both modes require a clean working tree (no uncommitted changes to tracked files); untracked files are allowed and never included in release commits.
+
 ### Direct Mode (default)
 
 Commits directly to the current branch and creates tags locally.
@@ -240,6 +242,8 @@ release-smith release --pr
 # Step 2: After PR is merged, create tags + GitHub Releases
 release-smith release-tags --pr-number=42
 ```
+
+`release-tags` verifies that HEAD matches the merged PR's merge commit before tagging, so CI must check out `github.event.pull_request.merge_commit_sha` (see the workflow example below).
 
 The Release PR body includes:
 - A summary table with package names, versions, and tags
@@ -381,6 +385,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Tag the real commit on main, not the synthetic PR merge ref
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - uses: oven-sh/setup-bun@v2
 
