@@ -32,6 +32,7 @@ export async function loadConfig(cwd: string): Promise<RawConfig | null> {
     "groups",
     "prLabels",
     "ignoreFiles",
+    "changelog",
   ]);
   const unknownKeys = Object.keys(raw).filter((k) => !KNOWN_KEYS.has(k));
   if (unknownKeys.length > 0) {
@@ -45,5 +46,6 @@ export async function loadConfig(cwd: string): Promise<RawConfig | null> {
     groups: raw.groups as RawConfig["groups"],
     prLabels: raw.prLabels as RawConfig["prLabels"],
     ignoreFiles: raw.ignoreFiles as RawConfig["ignoreFiles"],
+    changelog: raw.changelog as RawConfig["changelog"],
   };
 }

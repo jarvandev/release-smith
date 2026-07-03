@@ -18,6 +18,28 @@ export interface BranchConfig {
   prerelease: string;
 }
 
+export interface ChangelogSectionConfig {
+  /** Conventional commit type this section collects (e.g., "feat", "perf"). */
+  type: string;
+  /** Section heading rendered in the changelog. */
+  title: string;
+}
+
+export interface ChangelogConfig {
+  /**
+   * Changelog sections. An entry whose type matches a built-in section
+   * (`feat`, `fix`) overrides its title. Entries with other types add
+   * sections after the built-in ones, in config order. Extra types never
+   * affect version bump calculation.
+   */
+  sections?: ChangelogSectionConfig[];
+  /**
+   * Append a compare link (`**Full Changelog**: <repoUrl>/compare/<prev>...<new>`)
+   * under each version header. Omitted on first releases. Defaults to false.
+   */
+  compareLink?: boolean;
+}
+
 export interface RawConfig {
   /** Glob patterns for files to ignore when assigning commits to packages (applied globally). */
   ignoreFiles?: string[];
@@ -38,6 +60,8 @@ export interface RawConfig {
   groups?: VersionGroups;
   /** Labels to add to Release PRs. Defaults to ["autorelease: pending"]. */
   prLabels?: string[];
+  /** Changelog rendering options. */
+  changelog?: ChangelogConfig;
 }
 
 export interface VersionGroups {
