@@ -13,17 +13,23 @@ export async function discoverPackages(
 
   // Single-package project
   if (!rootPkg.workspaces) {
-    const pkgIgnoreFiles = config?.packages?.["."]?.ignoreFiles ?? [];
+    warnUnmatchedPackageKeys(config, new Set(["."]));
+    const configEntry = config?.packages?.["."];
+    const pkgIgnoreFiles = configEntry?.ignoreFiles ?? [];
     const dirName = cwd.split("/").pop() || "unknown";
+    const isPrivate = rootPkg.private === true;
     return [
       {
         name: rootPkg.name ?? dirName,
         path: ".",
-        publish: true,
-        changelogPath: join(cwd, "CHANGELOG.md"),
+        publish: configEntry?.publish ?? !isPrivate,
+        changelogPath: configEntry?.changelog
+          ? join(cwd, configEntry.changelog)
+          : join(cwd, "CHANGELOG.md"),
         version: rootPkg.version ?? "0.0.0",
-        isPrivate: rootPkg.private === true,
+        isPrivate,
         workspaceDeps: [],
+        from: configEntry?.from,
         ignoreFiles: [...globalIgnoreFiles, ...pkgIgnoreFiles],
       },
     ];
@@ -48,6 +54,8 @@ export async function discoverPackages(
     const pkg = await readPackageJson(dir);
     pkgDataList.push({ dir, relPath, pkg });
   }
+
+  warnUnmatchedPackageKeys(config, new Set(pkgDataList.map((p) => p.relPath)));
 
   const allWorkspaceNames = new Set(pkgDataList.map((p) => p.pkg.name).filter(Boolean));
 
@@ -109,6 +117,16 @@ export async function discoverPackages(
   return resolved;
 }
 
+function warnUnmatchedPackageKeys(config: RawConfig | null, discoveredPaths: Set<string>): void {
+  for (const key of Object.keys(config?.packages ?? {})) {
+    if (!discoveredPaths.has(key)) {
+      console.warn(
+        `Warning: Config entry "${key}" does not match any workspace package. Check for typos.`,
+      );
+    }
+  }
+}
+
 function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<string>): string[] {
   const deps = new Set<string>();
   for (const source of [pkg.dependencies, pkg.peerDependencies]) {
@@ -122,7 +140,12 @@ function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<stri
 
 async function resolveWorkspaceGlobs(cwd: string, patterns: string[]): Promise<string[]> {
   const globs = patterns.map((p) => `${p}/package.json`);
-  const matches = await fg(globs, { cwd, onlyFiles: true, absolute: true });
+  const matches = await fg(globs, {
+    cwd,
+    onlyFiles: true,
+    absolute: true,
+    ignore: ["**/node_modules/**"],
+  });
   return matches.map((m) => join(m, "..")).sort();
 }
 

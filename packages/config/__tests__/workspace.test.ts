@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -425,5 +425,80 @@ describe("discoverPackages", () => {
 
     const result = await discoverPackages(tempDir, config);
     expect(result[0].ignoreFiles).toEqual(["**/*.test.*"]);
+  });
+
+  it("warns when a config package key matches no discovered package", async () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      packages: { "pkgs/core": { publish: true } },
+    };
+
+    await discoverPackages(tempDir, config);
+    const messages = warnSpy.mock.calls.map((c) => c[0] as string);
+    expect(messages.some((m) => m.includes("pkgs/core"))).toBe(true);
+    warnSpy.mockRestore();
+  });
+
+  it("excludes node_modules from workspace glob resolution", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/**"],
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+    await createPackage(join(tempDir, "packages/core/node_modules/third-party"), {
+      name: "third-party",
+      version: "9.9.9",
+    });
+
+    const result = await discoverPackages(tempDir, null);
+    expect(result.map((p) => p.name)).toEqual(["@scope/core"]);
+  });
+
+  it("single-package project respects config overrides", async () => {
+    await createPackage(tempDir, {
+      name: "my-app",
+      version: "1.0.0",
+    });
+
+    const config: RawConfig = {
+      packages: {
+        ".": {
+          publish: false,
+          changelog: "docs/CHANGELOG.md",
+          from: "abc1234",
+        },
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    expect(result).toHaveLength(1);
+    expect(result[0].publish).toBe(false);
+    expect(result[0].changelogPath).toBe(join(tempDir, "docs/CHANGELOG.md"));
+    expect(result[0].from).toBe("abc1234");
+  });
+
+  it("single-package project defaults private package to publish: false", async () => {
+    await createPackage(tempDir, {
+      name: "my-app",
+      version: "1.0.0",
+      private: true,
+    });
+
+    const result = await discoverPackages(tempDir, null);
+    expect(result[0].publish).toBe(false);
   });
 });
