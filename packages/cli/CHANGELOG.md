@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0] - 2026-07-03
+
+### Features
+
+- **cli:** add --json output to status and changelog commands ([#15](https://github.com/jarvandev/release-smith/pull/15)) ([e147eb5](https://github.com/jarvandev/release-smith/commit/e147eb577c2a46f5bbd2d37b411ccd76c3b6019c))
+- **core:** configurable changelog sections and compare links ([#16](https://github.com/jarvandev/release-smith/pull/16)) ([2e413d4](https://github.com/jarvandev/release-smith/commit/2e413d4a2669b9ec03cc2d82a9f63687096ce4b5))
+
+### Bug Fixes
+
+- resolve all high and medium severity audit findings ([#17](https://github.com/jarvandev/release-smith/pull/17)) ([2cbef62](https://github.com/jarvandev/release-smith/commit/2cbef6257224762e2df194f2327b79b3ae42a6c8))
+
 ## [0.9.1] - 2026-03-22
 
 ### Bug Fixes
