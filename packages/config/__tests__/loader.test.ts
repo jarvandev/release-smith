@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest, spyOn } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/loader";
@@ -182,5 +182,99 @@ describe("loadConfig", () => {
     await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
     const result = await loadConfig(tempDir);
     expect(result?.packages?.["packages/cli"]?.ignoreFiles).toEqual(["scripts/**", "**/*.test.*"]);
+  });
+
+  it("throws when the config file exists but cannot be read", async () => {
+    await mkdir(join(tempDir, "release-smith.json"));
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/Failed to read config file/);
+  });
+
+  it("throws when config root is not an object", async () => {
+    await writeFile(join(tempDir, "release-smith.json"), "null");
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/must be a JSON object/);
+  });
+
+  it("throws when packages is an array", async () => {
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ packages: ["packages/core"] }),
+    );
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/"packages" must be an object/);
+  });
+
+  it("throws when a package entry is not an object", async () => {
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ packages: { "packages/core": true } }),
+    );
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/packages\/core/);
+  });
+
+  it("throws when a package entry field has the wrong type", async () => {
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ packages: { "packages/core": { publish: "yes" } } }),
+    );
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/"publish".*boolean/);
+  });
+
+  it("throws when a branches entry is not an object with a prerelease string", async () => {
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ branches: { next: "beta" } }),
+    );
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/branches.*next/);
+  });
+
+  it("throws when prLabels is not an array of strings", async () => {
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ prLabels: "autorelease" }),
+    );
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/"prLabels"/);
+  });
+
+  it("throws when groups.fixed is not an array of string arrays", async () => {
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ groups: { fixed: ["@a/x", "@a/y"] } }),
+    );
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/groups\.fixed/);
+  });
+
+  it("throws when tagFormat is not a string", async () => {
+    await writeFile(join(tempDir, "release-smith.json"), JSON.stringify({ tagFormat: 42 }));
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/"tagFormat"/);
+  });
+
+  it("throws when ignoreFiles is not an array of strings", async () => {
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ ignoreFiles: "**/*.md" }),
+    );
+
+    await expect(loadConfig(tempDir)).rejects.toThrow(/"ignoreFiles"/);
+  });
+
+  it("warns on unknown keys inside a package entry", async () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({ packages: { "packages/core": { Publish: true } } }),
+    );
+
+    await loadConfig(tempDir);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0] as string).toContain("Publish");
+    warnSpy.mockRestore();
   });
 });

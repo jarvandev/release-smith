@@ -72,8 +72,13 @@ export interface VersionGroups {
 }
 
 export interface ResolvedPackage {
-  /** Package name from package.json */
+  /**
+   * Canonical npm name from package.json. Keys the dependency graph
+   * (workspaceDeps, propagation, rollup, groups, dependency updates).
+   */
   name: string;
+  /** Config name override, used for tags, changelogs, commit messages, and CI outputs. Defaults to `name`. */
+  displayName: string;
   /** Relative path from project root (e.g., "packages/core") */
   path: string;
   /** Whether to publish this package */

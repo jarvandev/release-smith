@@ -5,6 +5,16 @@ export interface GitHubClientOptions {
   timeoutMs?: number;
 }
 
+export class GitHubApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "GitHubApiError";
+    this.status = status;
+  }
+}
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export async function githubRequest(
@@ -42,7 +52,10 @@ export async function githubRequest(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`GitHub API ${method} ${path} failed (${response.status}): ${text}`);
+    throw new GitHubApiError(
+      `GitHub API ${method} ${path} failed (${response.status}): ${text}`,
+      response.status,
+    );
   }
   return response;
 }

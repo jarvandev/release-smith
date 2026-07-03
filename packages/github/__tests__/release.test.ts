@@ -29,6 +29,26 @@ describe("parseGitHubUrl", () => {
       repo: "my-repo",
     });
   });
+  it("parses repo names containing dots", () => {
+    expect(parseGitHubUrl("https://github.com/vercel/next.js.git")).toEqual({
+      owner: "vercel",
+      repo: "next.js",
+    });
+    expect(parseGitHubUrl("https://github.com/vercel/next.js")).toEqual({
+      owner: "vercel",
+      repo: "next.js",
+    });
+    expect(parseGitHubUrl("git@github.com:vercel/next.js.git")).toEqual({
+      owner: "vercel",
+      repo: "next.js",
+    });
+  });
+  it("parses URL with trailing slash", () => {
+    expect(parseGitHubUrl("https://github.com/user/repo/")).toEqual({
+      owner: "user",
+      repo: "repo",
+    });
+  });
 });
 
 describe("createGitHubRelease", () => {
@@ -106,6 +126,61 @@ describe("createGitHubRelease", () => {
       });
       expect(result.skipped).toBe(true);
       expect(result.reason).toContain("already exists");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("url-encodes the tag in the existence check", async () => {
+    const originalFetch = globalThis.fetch;
+    let getUrl = "";
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (init?.method === "GET") {
+        getUrl = url;
+        return new Response("Not found", { status: 404 });
+      }
+      return new Response(JSON.stringify({ html_url: "https://github.com/u/r/releases/x" }), {
+        status: 201,
+      });
+    };
+    try {
+      await createGitHubRelease({
+        owner: "user",
+        repo: "repo",
+        tag: "@myapp/core@1.2.3",
+        name: "@myapp/core@1.2.3",
+        body: "changelog",
+        token: "test-token",
+      });
+      expect(getUrl).toContain("/releases/tags/%40myapp%2Fcore%401.2.3");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("propagates non-404 errors from the existence check instead of creating", async () => {
+    const originalFetch = globalThis.fetch;
+    let postAttempted = false;
+    globalThis.fetch = async (_input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "GET") {
+        return new Response("rate limited", { status: 403 });
+      }
+      postAttempted = true;
+      return new Response("{}", { status: 201 });
+    };
+    try {
+      await expect(
+        createGitHubRelease({
+          owner: "user",
+          repo: "repo",
+          tag: "v1.0.0",
+          name: "v1.0.0",
+          body: "changelog",
+          token: "test-token",
+        }),
+      ).rejects.toThrow(/403/);
+      expect(postAttempted).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }

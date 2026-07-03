@@ -2,7 +2,9 @@ import type { ChangelogConfig, ResolvedPackage } from "@release-smith/config";
 import {
   applyReleaseChanges,
   buildCommitMessage,
+  ensureCleanWorkingTree,
   type ReleaseResult,
+  stageReleaseChanges,
   type VersionBump,
 } from "@release-smith/core";
 import { execGit } from "@release-smith/git";
@@ -49,13 +51,17 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
 
   for (const bump of bumps) {
     const suffix = bump.propagated ? " (dependency update)" : "";
-    console.log(`${bump.packageName}: ${bump.currentVersion} -> ${bump.newVersion}${suffix}`);
+    console.log(`${bump.displayName}: ${bump.currentVersion} -> ${bump.newVersion}${suffix}`);
   }
 
   if (dryRun) {
     console.log("\nDry run - would create/update PR on branch:", branch);
     return;
   }
+
+  // A dirty tree would carry uncommitted changes onto the release branch
+  // and lose them when switching back to the base branch.
+  await ensureCleanWorkingTree(cwd);
 
   // Create or reset release branch from current base
   await execGit(["checkout", "-B", branch, `origin/${baseBranch}`], cwd);
@@ -72,7 +78,7 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
     });
     const commitMsg = buildCommitMessage(results);
 
-    await execGit(["add", "-A"], cwd);
+    await stageReleaseChanges(cwd, packages, bumps);
     await execGit(["commit", "-m", commitMsg], cwd);
     await execGit(["push", "-u", "origin", branch, "--force-with-lease"], cwd);
 
@@ -160,10 +166,11 @@ export function parseReleaseMetadata(
 ):
   | Pick<ReleaseResult, "packageName" | "packagePath" | "version" | "tagName" | "changelog">[]
   | null {
-  const match = body.match(/<!-- release-smith:metadata\n([\s\S]*?)\n-->/);
+  // GitHub rewrites PR bodies to CRLF when the description is edited
+  const match = body.match(/<!-- release-smith:metadata\r?\n([\s\S]*?)\r?\n-->/);
   if (!match?.[1]) return null;
   try {
-    const parsed = JSON.parse(match[1]);
+    const parsed = JSON.parse(match[1].replace(/\r/g, ""));
     if (
       !Array.isArray(parsed) ||
       parsed.some(
