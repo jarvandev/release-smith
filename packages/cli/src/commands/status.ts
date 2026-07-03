@@ -25,11 +25,12 @@ export default defineCommand({
     if (args.json) {
       const packages = bumps.map((bump) => ({
         name: bump.packageName,
+        displayName: bump.displayName,
         path: bump.packagePath,
         currentVersion: bump.currentVersion,
         nextVersion: bump.newVersion,
         bumpLevel: bump.level,
-        tagName: formatTagName(tagFormat, bump.packageName, bump.newVersion),
+        tagName: formatTagName(tagFormat, bump.displayName, bump.newVersion),
         propagated: bump.propagated,
         commits: bump.commits.map((c) => ({
           hash: c.hash,
@@ -51,7 +52,7 @@ export default defineCommand({
     console.log("Pending releases:\n");
     for (const bump of bumps) {
       const suffix = bump.propagated ? " (dependency update)" : "";
-      console.log(`  ${bump.packageName}`);
+      console.log(`  ${bump.displayName}`);
       console.log(`    ${bump.currentVersion} -> ${bump.newVersion} (${bump.level})${suffix}`);
       if (bump.commits.length > 0) {
         for (const c of bump.commits) console.log(`    - ${c.rawMessage}`);

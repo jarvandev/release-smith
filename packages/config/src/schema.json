@@ -73,6 +73,10 @@
           },
           "description": "Labels to add to Release PRs. Defaults to [\"autorelease: pending\"]."
         },
+        "changelog": {
+          "$ref": "#/definitions/ChangelogConfig",
+          "description": "Changelog rendering options."
+        },
         "$schema": {
           "type": "string",
           "description": "Path or URL to the JSON Schema for editor validation."
@@ -115,6 +119,38 @@
           "description": "Linked groups: bumped packages share the highest version."
         }
       },
+      "additionalProperties": false
+    },
+    "ChangelogConfig": {
+      "type": "object",
+      "properties": {
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ChangelogSectionConfig"
+          },
+          "description": "Changelog sections. An entry whose type matches a built-in section (`feat`, `fix`) overrides its title. Entries with other types add sections after the built-in ones, in config order. Extra types never affect version bump calculation."
+        },
+        "compareLink": {
+          "type": "boolean",
+          "description": "Append a compare link (`**Full Changelog**: <repoUrl>/compare/<prev>...<new>`) under each version header. Omitted on first releases. Defaults to false."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ChangelogSectionConfig": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Conventional commit type this section collects (e.g., \"feat\", \"perf\")."
+        },
+        "title": {
+          "type": "string",
+          "description": "Section heading rendered in the changelog."
+        }
+      },
+      "required": ["type", "title"],
       "additionalProperties": false
     }
   },

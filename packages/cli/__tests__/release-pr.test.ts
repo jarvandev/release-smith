@@ -142,4 +142,24 @@ describe("buildPRBody + parseReleaseMetadata roundtrip", () => {
     expect(body).toContain("## Release Summary");
     expect(body).toContain("| my-pkg | 1.0.0 | `v1.0.0` |");
   });
+
+  it("metadata survives CRLF normalization from GitHub body edits", () => {
+    const results = [
+      {
+        packageName: "my-pkg",
+        packagePath: ".",
+        version: "1.0.0",
+        changelog: "## 1.0.0\n\n### Features\n\n- something",
+        tagName: "v1.0.0",
+      },
+    ];
+    // GitHub rewrites PR bodies to CRLF when anyone edits the description
+    const body = buildPRBody(results).replace(/\n/g, "\r\n");
+    const parsed = parseReleaseMetadata(body);
+
+    expect(parsed).not.toBeNull();
+    expect(parsed![0].packageName).toBe("my-pkg");
+    expect(parsed![0].version).toBe("1.0.0");
+    expect(parsed![0].tagName).toBe("v1.0.0");
+  });
 });

@@ -92,6 +92,7 @@ describe("json output", () => {
       const core = result.packages.find((p: { name: string }) => p.name === "@test/core");
       expect(core).toEqual({
         name: "@test/core",
+        displayName: "@test/core",
         path: "packages/core",
         currentVersion: "1.0.0",
         nextVersion: "1.1.0",
@@ -112,6 +113,7 @@ describe("json output", () => {
       const cli = result.packages.find((p: { name: string }) => p.name === "@test/cli");
       expect(cli).toEqual({
         name: "@test/cli",
+        displayName: "@test/cli",
         path: "packages/cli",
         currentVersion: "1.0.0",
         nextVersion: "1.0.1",

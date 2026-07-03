@@ -13,17 +13,24 @@ export async function discoverPackages(
 
   // Single-package project
   if (!rootPkg.workspaces) {
-    const pkgIgnoreFiles = config?.packages?.["."]?.ignoreFiles ?? [];
+    warnUnmatchedPackageKeys(config, new Set(["."]));
+    const configEntry = config?.packages?.["."];
+    const pkgIgnoreFiles = configEntry?.ignoreFiles ?? [];
     const dirName = cwd.split("/").pop() || "unknown";
+    const isPrivate = rootPkg.private === true;
     return [
       {
         name: rootPkg.name ?? dirName,
+        displayName: configEntry?.name ?? rootPkg.name ?? dirName,
         path: ".",
-        publish: true,
-        changelogPath: join(cwd, "CHANGELOG.md"),
+        publish: configEntry?.publish ?? !isPrivate,
+        changelogPath: configEntry?.changelog
+          ? join(cwd, configEntry.changelog)
+          : join(cwd, "CHANGELOG.md"),
         version: rootPkg.version ?? "0.0.0",
-        isPrivate: rootPkg.private === true,
+        isPrivate,
         workspaceDeps: [],
+        from: configEntry?.from,
         ignoreFiles: [...globalIgnoreFiles, ...pkgIgnoreFiles],
       },
     ];
@@ -48,6 +55,8 @@ export async function discoverPackages(
     const pkg = await readPackageJson(dir);
     pkgDataList.push({ dir, relPath, pkg });
   }
+
+  warnUnmatchedPackageKeys(config, new Set(pkgDataList.map((p) => p.relPath)));
 
   const allWorkspaceNames = new Set(pkgDataList.map((p) => p.pkg.name).filter(Boolean));
 
@@ -77,24 +86,30 @@ export async function discoverPackages(
     const workspaceDeps = [...new Set([...autoDetected, ...extra])];
 
     const dirName = relPath.split("/").pop() || relPath;
-    const name = configEntry?.name ?? pkg.name ?? dirName;
+    // The npm name stays canonical so the dependency graph (workspaceDeps,
+    // propagation, rollup) keeps working; the override only affects display.
+    const name = pkg.name ?? dirName;
+    const displayName = configEntry?.name ?? name;
     if (!pkg.name && !configEntry?.name) {
       console.warn(
         `Warning: Package at "${relPath}" has no name in package.json, using directory name "${dirName}" as fallback.`,
       );
     }
 
-    if (packageByName.has(name)) {
-      throw new Error(
-        `Duplicate package name "${name}" found in "${packageByName.get(name)}" and "${relPath}". ` +
-          "Add a unique name in package.json or use the config name override.",
-      );
+    for (const candidate of new Set([name, displayName])) {
+      if (packageByName.has(candidate)) {
+        throw new Error(
+          `Duplicate package name "${candidate}" found in "${packageByName.get(candidate)}" and "${relPath}". ` +
+            "Add a unique name in package.json or use the config name override.",
+        );
+      }
+      packageByName.set(candidate, relPath);
     }
-    packageByName.set(name, relPath);
 
     const pkgIgnoreFiles = configEntry?.ignoreFiles ?? [];
     resolved.push({
       name,
+      displayName,
       path: relPath,
       publish,
       changelogPath,
@@ -107,6 +122,16 @@ export async function discoverPackages(
   }
 
   return resolved;
+}
+
+function warnUnmatchedPackageKeys(config: RawConfig | null, discoveredPaths: Set<string>): void {
+  for (const key of Object.keys(config?.packages ?? {})) {
+    if (!discoveredPaths.has(key)) {
+      console.warn(
+        `Warning: Config entry "${key}" does not match any workspace package. Check for typos.`,
+      );
+    }
+  }
 }
 
 function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<string>): string[] {
@@ -122,7 +147,12 @@ function collectWorkspaceDeps(pkg: Record<string, any>, workspaceNames: Set<stri
 
 async function resolveWorkspaceGlobs(cwd: string, patterns: string[]): Promise<string[]> {
   const globs = patterns.map((p) => `${p}/package.json`);
-  const matches = await fg(globs, { cwd, onlyFiles: true, absolute: true });
+  const matches = await fg(globs, {
+    cwd,
+    onlyFiles: true,
+    absolute: true,
+    ignore: ["**/node_modules/**"],
+  });
   return matches.map((m) => join(m, "..")).sort();
 }
 

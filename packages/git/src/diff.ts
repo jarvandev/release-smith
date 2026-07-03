@@ -2,7 +2,16 @@ import { execGit } from "./executor";
 
 export async function getChangedFiles(cwd: string, commitHash: string): Promise<string[]> {
   const output = await execGit(
-    ["diff-tree", "--no-commit-id", "--name-only", "-r", "--root", commitHash],
+    [
+      "-c",
+      "core.quotepath=false",
+      "diff-tree",
+      "--no-commit-id",
+      "--name-only",
+      "-r",
+      "--root",
+      commitHash,
+    ],
     cwd,
   );
   if (!output) return [];
@@ -33,7 +42,15 @@ export async function getChangedFilesForCommits(
   for (let i = 0; i < hashes.length; i += BATCH_SIZE) {
     const batch = hashes.slice(i, i + BATCH_SIZE);
     const output = await execGit(
-      ["log", "--no-walk", "--name-only", `--format=${HASH_SEPARATOR}%H`, ...batch],
+      [
+        "-c",
+        "core.quotepath=false",
+        "log",
+        "--no-walk",
+        "--name-only",
+        `--format=${HASH_SEPARATOR}%H`,
+        ...batch,
+      ],
       cwd,
     );
 

@@ -1,5 +1,5 @@
 // @release-smith/github public API
-export { githubRequest } from "./client";
+export { GitHubApiError, githubRequest } from "./client";
 export type { PullRequest } from "./pull-request";
 export {
   addLabelsToPullRequest,

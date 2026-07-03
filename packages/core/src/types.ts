@@ -17,12 +17,17 @@ export interface PackageCommit {
 
 export interface VersionBump {
   packagePath: string;
+  /** Canonical npm name (keys groups, propagation, and dependency updates). */
   packageName: string;
+  /** Name used for tags, changelogs, and commit messages. */
+  displayName: string;
   currentVersion: string;
   newVersion: string;
   level: BumpLevel;
   commits: ConventionalCommit[];
   propagated: boolean;
+  /** Tag of the previous release, if any. Used for changelog compare links. */
+  previousTag?: string | null;
 }
 
 export interface ChangelogEntry {

@@ -25,6 +25,7 @@ function makeCommit(overrides: Partial<ConventionalCommit> = {}): ConventionalCo
 function makePackage(overrides: Partial<ResolvedPackage> = {}): ResolvedPackage {
   return {
     name: "@myapp/core",
+    displayName: overrides.name ?? "@myapp/core",
     path: "packages/core",
     publish: true,
     changelogPath: "/tmp/CHANGELOG.md",
@@ -40,6 +41,7 @@ function makeBump(overrides: Partial<VersionBump> = {}): VersionBump {
   return {
     packagePath: "packages/core",
     packageName: "@myapp/core",
+    displayName: overrides.packageName ?? "@myapp/core",
     currentVersion: "1.0.0",
     newVersion: "1.0.1",
     level: "patch",
@@ -190,6 +192,26 @@ describe("bumpPrerelease", () => {
     // targetStable = 1.1.0; current preid != requested preid -> new sequence
     expect(bumpPrerelease("1.1.0-alpha.5", "1.0.0", "minor", "beta")).toBe("1.1.0-beta.0");
   });
+
+  it("increments sequences with a numeric preid", () => {
+    expect(bumpPrerelease("1.1.0-1.0", "1.0.0", "minor", "1")).toBe("1.1.0-1.1");
+  });
+
+  it("increments sequences with a dotted preid", () => {
+    expect(bumpPrerelease("1.1.0-beta.x.0", "1.0.0", "minor", "beta.x")).toBe("1.1.0-beta.x.1");
+  });
+
+  it("continues an in-progress sequence when no stable version exists", () => {
+    expect(bumpPrerelease("1.1.0-beta.0", null, "minor", "beta")).toBe("1.1.0-beta.1");
+  });
+
+  it("starts a sequence from the current version when no stable version exists", () => {
+    expect(bumpPrerelease("1.0.0", null, "minor", "beta")).toBe("1.1.0-beta.0");
+  });
+
+  it("restarts at the same base when preid changes and no stable version exists", () => {
+    expect(bumpPrerelease("1.1.0-beta.2", null, "minor", "rc")).toBe("1.1.0-rc.0");
+  });
 });
 
 describe("applyVersionGroups", () => {
@@ -276,6 +298,31 @@ describe("applyVersionGroups", () => {
       // Should use 1.2.0 (highest current) + patch = 1.2.1
       const core = result.find((b) => b.packageName === "@a/core")!;
       expect(core.newVersion).toBe("1.2.1");
+    });
+
+    it("graduates a prerelease group to stable without inflating the version", () => {
+      // Both members sit at 1.1.0-beta.1 from a beta cycle; a stable run
+      // graduates the group to 1.1.0, not 1.2.0.
+      const packages = [
+        makePackage({ name: "@a/core", path: "a/core", version: "1.1.0-beta.1" }),
+        makePackage({ name: "@a/cli", path: "a/cli", version: "1.1.0-beta.1" }),
+      ];
+      const bumps: VersionBump[] = [
+        makeBump({
+          packagePath: "a/core",
+          packageName: "@a/core",
+          currentVersion: "1.1.0-beta.1",
+          newVersion: "1.1.0",
+          level: "minor",
+        }),
+      ];
+      const result = applyVersionGroups(bumps, packages, {
+        fixed: [["@a/core", "@a/cli"]],
+      });
+      const core = result.find((b) => b.packageName === "@a/core")!;
+      const cli = result.find((b) => b.packageName === "@a/cli")!;
+      expect(core.newVersion).toBe("1.1.0");
+      expect(cli.newVersion).toBe("1.1.0");
     });
   });
 

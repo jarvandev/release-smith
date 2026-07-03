@@ -9,6 +9,7 @@ import {
   buildCommitMessage,
   createReleaseTags,
   detectPackageManager,
+  executeRelease,
   updateLockFile,
   updatePackageVersion,
   updateVersionRange,
@@ -318,6 +319,21 @@ describe("updateVersionRange", () => {
       /Complex version range.*not supported/,
     );
   });
+
+  it("leaves bare wildcard ranges unchanged", () => {
+    expect(updateVersionRange("*", "1.3.0")).toBeNull();
+    expect(updateVersionRange("x", "1.3.0")).toBeNull();
+  });
+
+  it("leaves partial wildcard ranges unchanged", () => {
+    expect(updateVersionRange("1.x", "1.3.0")).toBeNull();
+    expect(updateVersionRange("1.2.x", "1.3.0")).toBeNull();
+  });
+
+  it("leaves dist-tag ranges unchanged", () => {
+    expect(updateVersionRange("latest", "1.3.0")).toBeNull();
+    expect(updateVersionRange("next", "1.3.0")).toBeNull();
+  });
 });
 
 describe("buildCommitMessage", () => {
@@ -387,6 +403,7 @@ function makeBump(overrides: Partial<VersionBump> = {}): VersionBump {
   return {
     packagePath: "packages/core",
     packageName: "@myapp/core",
+    displayName: overrides.packageName ?? "@myapp/core",
     currentVersion: "1.0.0",
     newVersion: "1.1.0",
     level: "minor",
@@ -409,6 +426,7 @@ function makeBump(overrides: Partial<VersionBump> = {}): VersionBump {
 function makePackage(overrides: Partial<ResolvedPackage> = {}): ResolvedPackage {
   return {
     name: "@myapp/core",
+    displayName: overrides.name ?? "@myapp/core",
     path: "packages/core",
     publish: true,
     changelogPath: "",
@@ -476,6 +494,79 @@ describe("applyReleaseChanges", () => {
     const changelog = await readFile(changelogPath, "utf-8");
     expect(changelog).toContain("## [1.1.0]");
     expect(changelog).toContain("add feature");
+  });
+
+  it("passes changelog sections config through to the changelog", async () => {
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const changelogPath = join(pkgDir, "CHANGELOG.md");
+    const pkg = makePackage({ changelogPath });
+    const bump = makeBump({
+      commits: [
+        {
+          hash: "abc123",
+          type: "feat",
+          scope: null,
+          description: "add feature",
+          body: "",
+          breaking: false,
+          rawMessage: "feat: add feature",
+        },
+        {
+          hash: "def456",
+          type: "perf",
+          scope: null,
+          description: "speed up parsing",
+          body: "",
+          breaking: false,
+          rawMessage: "perf: speed up parsing",
+        },
+      ],
+    });
+    await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [pkg],
+      isMonorepo: true,
+      changelogConfig: { sections: [{ type: "perf", title: "Performance" }] },
+    });
+
+    const changelog = await readFile(changelogPath, "utf-8");
+    expect(changelog).toContain("### Performance");
+    expect(changelog).toContain("speed up parsing");
+  });
+
+  it("renders compare link when enabled and remote is resolvable", async () => {
+    await execGit(["remote", "add", "origin", "https://github.com/user/repo.git"], tempDir);
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const changelogPath = join(pkgDir, "CHANGELOG.md");
+    const pkg = makePackage({ changelogPath });
+    const bump = makeBump({ previousTag: "@myapp/core@1.0.0" });
+    await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [pkg],
+      isMonorepo: true,
+      changelogConfig: { compareLink: true },
+    });
+
+    const changelog = await readFile(changelogPath, "utf-8");
+    expect(changelog).toContain(
+      "**Full Changelog**: https://github.com/user/repo/compare/@myapp/core@1.0.0...@myapp/core@1.1.0",
+    );
   });
 
   it("updates workspace dependency versions", async () => {
@@ -800,5 +891,52 @@ describe("updateLockFile", () => {
     await writeFile(join(tempDir, "bun.lock"), "");
     // bun install should succeed without throwing
     await updateLockFile(tempDir);
+  });
+});
+
+describe("executeRelease", () => {
+  let tempDir: string;
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "rs-releaser-exec-"));
+    await initGitRepo(tempDir);
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+  });
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true });
+  });
+
+  function releaseOptions() {
+    return {
+      cwd: tempDir,
+      bumps: [makeBump()],
+      packages: [makePackage({ changelogPath: join(tempDir, "packages/core/CHANGELOG.md") })],
+      dryRun: false,
+      isMonorepo: true,
+    };
+  }
+
+  it("refuses to run on a dirty working tree", async () => {
+    await writeFile(join(tempDir, "packages/core/package.json"), "{}\n");
+
+    await expect(executeRelease(releaseOptions())).rejects.toThrow(/uncommitted changes/);
+  });
+
+  it("does not sweep untracked files into the release commit", async () => {
+    await writeFile(join(tempDir, "scratch-notes.txt"), "wip");
+
+    await executeRelease(releaseOptions());
+
+    const committed = await execGit(["show", "--name-only", "--format=", "HEAD"], tempDir);
+    expect(committed).toContain("packages/core/package.json");
+    expect(committed).toContain("packages/core/CHANGELOG.md");
+    expect(committed).not.toContain("scratch-notes.txt");
+    const status = await execGit(["status", "--porcelain", "scratch-notes.txt"], tempDir);
+    expect(status).toContain("??");
   });
 });

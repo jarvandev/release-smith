@@ -8,7 +8,10 @@ export interface PullRequest {
   head: { ref: string };
   base: { ref: string };
   state: string;
+  /** Only present on single-PR GET responses, not list responses. */
   merged: boolean;
+  /** Squash/merge commit on the base branch. Null until merge is resolvable. */
+  merge_commit_sha: string | null;
 }
 
 export async function findOpenPullRequest(

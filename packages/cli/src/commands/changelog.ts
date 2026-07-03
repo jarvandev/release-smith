@@ -20,15 +20,16 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const { bumps, isMonorepo, tagFormat } = await runPipeline(args.cwd);
+    const { bumps, isMonorepo, tagFormat, changelogConfig } = await runPipeline(args.cwd);
     const date = new Date().toISOString().slice(0, 10);
 
     if (args.json) {
       const packages = bumps.map((bump) => ({
         name: bump.packageName,
+        displayName: bump.displayName,
         version: bump.newVersion,
-        tagName: formatTagName(tagFormat, bump.packageName, bump.newVersion),
-        changelog: generateChangelog(bump, date, null),
+        tagName: formatTagName(tagFormat, bump.displayName, bump.newVersion),
+        changelog: generateChangelog(bump, date, null, { config: changelogConfig }),
       }));
       console.log(JSON.stringify({ packages }));
       return;
@@ -40,8 +41,8 @@ export default defineCommand({
     }
 
     for (const bump of bumps) {
-      if (isMonorepo) console.log(`\n--- ${bump.packageName} ---\n`);
-      console.log(generateChangelog(bump, date, null));
+      if (isMonorepo) console.log(`\n--- ${bump.displayName} ---\n`);
+      console.log(generateChangelog(bump, date, null, { config: changelogConfig }));
     }
   },
 });

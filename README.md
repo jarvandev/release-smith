@@ -91,7 +91,14 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
     "linked": [["@myapp/ui", "@myapp/theme"]]
   },
   "prLabels": ["autorelease: pending"],
-  "ignoreFiles": ["**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*.md"]
+  "ignoreFiles": ["**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*.md"],
+  "changelog": {
+    "sections": [
+      { "type": "feat", "title": "New Features" },
+      { "type": "perf", "title": "Performance" }
+    ],
+    "compareLink": true
+  }
 }
 ```
 
@@ -101,7 +108,7 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 |-------|------|-------------|
 | `packages` | `Record<string, PackageConfig>` | Map of package path to config. Listed = managed; unlisted = `publish: false` |
 | `packages.*.publish` | `boolean` | Whether to publish this package (default: `true` if listed) |
-| `packages.*.name` | `string` | Override package name for tags/changelogs/commits (default: `package.json` name) |
+| `packages.*.name` | `string` | Display name override for tags/changelogs/commits (default: `package.json` name). Dependency tracking and `groups` always use the `package.json` name |
 | `packages.*.from` | `string` | Starting commit hash. Only commits after this are considered for the first release |
 | `packages.*.changelog` | `string` | Custom changelog file path (default: `<packageDir>/CHANGELOG.md`) |
 | `packages.*.ignoreFiles` | `string[]` | Per-package glob patterns for files to ignore (merged with global, relative to package dir) |
@@ -112,6 +119,8 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 | `groups.fixed` | `string[][]` | Package groups that always share the same version |
 | `groups.linked` | `string[][]` | Bumped packages in a group share the highest version |
 | `prLabels` | `string[]` | Labels to add to Release PRs (default: `["autorelease: pending"]`) |
+| `changelog.sections` | `Array<{ type, title }>` | Override built-in section titles (`feat`, `fix`) or add sections for other commit types (see [Changelog Output](#changelog-output)) |
+| `changelog.compareLink` | `boolean` | Append a `**Full Changelog**` compare link under each version header (default: `false`) |
 
 ### Tag Format
 
@@ -120,6 +129,29 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 | Single package | `v{version}` | `v1.0.0` |
 | Monorepo | `{name}@{version}` | `@myapp/cli@1.0.0` |
 | Custom | `{name}@v{version}` | `@myapp/cli@v1.0.0` |
+
+### Changelog Output
+
+By default, changelogs contain three sections: `Breaking Changes`, `Features` (`feat`), and `Bug Fixes` (`fix`). The optional `changelog` config customizes the output:
+
+```json
+{
+  "changelog": {
+    "sections": [
+      { "type": "feat", "title": "New Features" },
+      { "type": "perf", "title": "Performance" }
+    ],
+    "compareLink": true
+  }
+}
+```
+
+- A `sections` entry whose `type` matches a built-in section (`feat`, `fix`) overrides that section's title.
+- Entries with other types (e.g. `perf`, `refactor`, `docs`) add sections, rendered after the built-in sections in config order.
+- **Version bump rules are unchanged**: extra section types never trigger a release by themselves. Their commits appear in the changelog only when the package releases anyway (e.g. alongside a `feat` or `fix` commit).
+- `compareLink: true` appends `**Full Changelog**: <repoUrl>/compare/<previousTag>...<newTag>` under each version header. The line is omitted on a first release (no previous tag) or when no GitHub remote is resolvable.
+
+When a GitHub remote is available, PR references like `(#123)` in commit descriptions (as produced by squash merges) are automatically rendered as links to the pull request. No configuration is needed.
 
 ## How It Works
 
@@ -147,7 +179,7 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 | `feat:` | minor | Yes (Features) |
 | `fix:` | patch | Yes (Bug Fixes) |
 | `feat!:` / `BREAKING CHANGE:` | major | Yes (Breaking Changes) |
-| `chore:`, `test:`, `refactor:`, `docs:`, etc. | none | No |
+| `chore:`, `test:`, `refactor:`, `docs:`, etc. | none | Only if added via `changelog.sections` |
 
 ### Monorepo Behavior
 
@@ -219,6 +251,8 @@ The `from` field sets a starting commit -- only commits after this hash are cons
 
 ## Release Modes
 
+Both modes require a clean working tree (no uncommitted changes to tracked files); untracked files are allowed and never included in release commits.
+
 ### Direct Mode (default)
 
 Commits directly to the current branch and creates tags locally.
@@ -240,6 +274,8 @@ release-smith release --pr
 # Step 2: After PR is merged, create tags + GitHub Releases
 release-smith release-tags --pr-number=42
 ```
+
+`release-tags` verifies that HEAD matches the merged PR's merge commit before tagging, so CI must check out `github.event.pull_request.merge_commit_sha` (see the workflow example below).
 
 The Release PR body includes:
 - A summary table with package names, versions, and tags
@@ -268,6 +304,7 @@ With `--json`, stdout contains a single JSON document:
   "packages": [
     {
       "name": "@myapp/core",
+      "displayName": "@myapp/core",
       "path": "packages/core",
       "currentVersion": "1.0.0",
       "nextVersion": "1.1.0",
@@ -304,6 +341,7 @@ With `--json`, stdout contains a single JSON document:
   "packages": [
     {
       "name": "@myapp/core",
+      "displayName": "@myapp/core",
       "version": "1.1.0",
       "tagName": "@myapp/core@1.1.0",
       "changelog": "## [1.1.0] - 2026-07-03\n\n### Features\n..."
@@ -311,6 +349,8 @@ With `--json`, stdout contains a single JSON document:
   ]
 }
 ```
+
+`name` is the `package.json` name; `displayName` reflects the config `name` override (they match when no override is set). Tags are derived from `displayName`.
 
 When there is nothing to release, both commands emit `{"packages": []}`.
 
@@ -435,6 +475,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Tag the real commit on main, not the synthetic PR merge ref
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - uses: oven-sh/setup-bun@v2
 
