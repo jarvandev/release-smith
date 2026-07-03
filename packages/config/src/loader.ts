@@ -12,6 +12,7 @@ const KNOWN_KEYS = new Set([
   "groups",
   "prLabels",
   "ignoreFiles",
+  "changelog",
 ]);
 
 const KNOWN_PACKAGE_KEYS = new Set([
@@ -135,6 +136,26 @@ function validateConfig(raw: unknown, configPath: string): RawConfig {
     throw invalid('"ignoreFiles" must be an array of strings');
   }
 
+  if (raw.changelog !== undefined) {
+    if (!isPlainObject(raw.changelog)) {
+      throw invalid('"changelog" must be an object');
+    }
+    const { sections, compareLink } = raw.changelog;
+    if (sections !== undefined) {
+      const sectionsValid =
+        Array.isArray(sections) &&
+        sections.every(
+          (s) => isPlainObject(s) && typeof s.type === "string" && typeof s.title === "string",
+        );
+      if (!sectionsValid) {
+        throw invalid('"changelog.sections" must be an array of { type, title } objects');
+      }
+    }
+    if (compareLink !== undefined && typeof compareLink !== "boolean") {
+      throw invalid('"changelog.compareLink" must be a boolean');
+    }
+  }
+
   return {
     packages: (raw.packages as RawConfig["packages"]) ?? {},
     branches: raw.branches as RawConfig["branches"],
@@ -142,5 +163,6 @@ function validateConfig(raw: unknown, configPath: string): RawConfig {
     groups: raw.groups as RawConfig["groups"],
     prLabels: raw.prLabels as RawConfig["prLabels"],
     ignoreFiles: raw.ignoreFiles as RawConfig["ignoreFiles"],
+    changelog: raw.changelog as RawConfig["changelog"],
   };
 }

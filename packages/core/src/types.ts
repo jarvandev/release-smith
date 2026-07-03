@@ -26,6 +26,8 @@ export interface VersionBump {
   level: BumpLevel;
   commits: ConventionalCommit[];
   propagated: boolean;
+  /** Tag of the previous release, if any. Used for changelog compare links. */
+  previousTag?: string | null;
 }
 
 export interface ChangelogEntry {

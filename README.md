@@ -91,7 +91,14 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
     "linked": [["@myapp/ui", "@myapp/theme"]]
   },
   "prLabels": ["autorelease: pending"],
-  "ignoreFiles": ["**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*.md"]
+  "ignoreFiles": ["**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*.md"],
+  "changelog": {
+    "sections": [
+      { "type": "feat", "title": "New Features" },
+      { "type": "perf", "title": "Performance" }
+    ],
+    "compareLink": true
+  }
 }
 ```
 
@@ -112,6 +119,8 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 | `groups.fixed` | `string[][]` | Package groups that always share the same version |
 | `groups.linked` | `string[][]` | Bumped packages in a group share the highest version |
 | `prLabels` | `string[]` | Labels to add to Release PRs (default: `["autorelease: pending"]`) |
+| `changelog.sections` | `Array<{ type, title }>` | Override built-in section titles (`feat`, `fix`) or add sections for other commit types (see [Changelog Output](#changelog-output)) |
+| `changelog.compareLink` | `boolean` | Append a `**Full Changelog**` compare link under each version header (default: `false`) |
 
 ### Tag Format
 
@@ -120,6 +129,29 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 | Single package | `v{version}` | `v1.0.0` |
 | Monorepo | `{name}@{version}` | `@myapp/cli@1.0.0` |
 | Custom | `{name}@v{version}` | `@myapp/cli@v1.0.0` |
+
+### Changelog Output
+
+By default, changelogs contain three sections: `Breaking Changes`, `Features` (`feat`), and `Bug Fixes` (`fix`). The optional `changelog` config customizes the output:
+
+```json
+{
+  "changelog": {
+    "sections": [
+      { "type": "feat", "title": "New Features" },
+      { "type": "perf", "title": "Performance" }
+    ],
+    "compareLink": true
+  }
+}
+```
+
+- A `sections` entry whose `type` matches a built-in section (`feat`, `fix`) overrides that section's title.
+- Entries with other types (e.g. `perf`, `refactor`, `docs`) add sections, rendered after the built-in sections in config order.
+- **Version bump rules are unchanged**: extra section types never trigger a release by themselves. Their commits appear in the changelog only when the package releases anyway (e.g. alongside a `feat` or `fix` commit).
+- `compareLink: true` appends `**Full Changelog**: <repoUrl>/compare/<previousTag>...<newTag>` under each version header. The line is omitted on a first release (no previous tag) or when no GitHub remote is resolvable.
+
+When a GitHub remote is available, PR references like `(#123)` in commit descriptions (as produced by squash merges) are automatically rendered as links to the pull request. No configuration is needed.
 
 ## How It Works
 
@@ -147,7 +179,7 @@ Only list packages you want to publish. Unlisted packages default to `publish: f
 | `feat:` | minor | Yes (Features) |
 | `fix:` | patch | Yes (Bug Fixes) |
 | `feat!:` / `BREAKING CHANGE:` | major | Yes (Breaking Changes) |
-| `chore:`, `test:`, `refactor:`, `docs:`, etc. | none | No |
+| `chore:`, `test:`, `refactor:`, `docs:`, etc. | none | Only if added via `changelog.sections` |
 
 ### Monorepo Behavior
 

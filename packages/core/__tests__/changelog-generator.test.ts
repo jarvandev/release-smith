@@ -209,6 +209,210 @@ describe("generateChangelog", () => {
   });
 });
 
+describe("generateChangelog with sections config", () => {
+  it("renders extra section for configured type after built-ins", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "1.1.0",
+      level: "minor",
+      commits: [
+        makeCommit({
+          type: "feat",
+          description: "new feature",
+          hash: "aaa111aaa111aaa111aaa111aaa111aaa111aaa1",
+        }),
+        makeCommit({
+          type: "perf",
+          description: "speed up parsing",
+          hash: "bbb222bbb222bbb222bbb222bbb222bbb222bbb2",
+        }),
+      ],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null, {
+      config: { sections: [{ type: "perf", title: "Performance" }] },
+    });
+    expect(result).toContain("### Performance");
+    expect(result).toContain("speed up parsing");
+    expect(result.indexOf("### Features")).toBeLessThan(result.indexOf("### Performance"));
+  });
+
+  it("renders multiple extra sections in config order", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "1.0.1",
+      level: "patch",
+      commits: [
+        makeCommit({
+          type: "docs",
+          description: "update readme",
+          hash: "aaa111aaa111aaa111aaa111aaa111aaa111aaa1",
+        }),
+        makeCommit({
+          type: "perf",
+          description: "speed up parsing",
+          hash: "bbb222bbb222bbb222bbb222bbb222bbb222bbb2",
+        }),
+        makeCommit({ type: "fix", description: "fix crash" }),
+      ],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null, {
+      config: {
+        sections: [
+          { type: "perf", title: "Performance" },
+          { type: "docs", title: "Documentation" },
+        ],
+      },
+    });
+    expect(result.indexOf("### Bug Fixes")).toBeLessThan(result.indexOf("### Performance"));
+    expect(result.indexOf("### Performance")).toBeLessThan(result.indexOf("### Documentation"));
+    expect(result).toContain("update readme");
+  });
+
+  it("overrides built-in section titles", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "1.1.0",
+      level: "minor",
+      commits: [
+        makeCommit({
+          type: "feat",
+          description: "add login",
+          hash: "aaa111aaa111aaa111aaa111aaa111aaa111aaa1",
+        }),
+        makeCommit({ type: "fix", description: "fix crash" }),
+      ],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null, {
+      config: {
+        sections: [
+          { type: "feat", title: "New Features" },
+          { type: "fix", title: "Fixes" },
+        ],
+      },
+    });
+    expect(result).toContain("### New Features");
+    expect(result).toContain("### Fixes");
+    expect(result).not.toContain("### Features");
+    expect(result).not.toContain("### Bug Fixes");
+  });
+
+  it("omits extra section when no commits of that type", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "1.0.1",
+      level: "patch",
+      commits: [makeCommit({ type: "fix", description: "fix crash" })],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null, {
+      config: { sections: [{ type: "perf", title: "Performance" }] },
+    });
+    expect(result).not.toContain("### Performance");
+  });
+});
+
+describe("generateChangelog compare link", () => {
+  const bump: VersionBump = {
+    packagePath: ".",
+    packageName: "my-tool",
+    currentVersion: "1.0.0",
+    newVersion: "1.0.1",
+    level: "patch",
+    commits: [makeCommit()],
+    propagated: false,
+  };
+
+  it("appends compare link under the version header", () => {
+    const result = generateChangelog(bump, "2026-03-14", "https://github.com/user/repo", {
+      config: { compareLink: true },
+      previousTag: "v1.0.0",
+      newTag: "v1.0.1",
+    });
+    expect(result).toContain(
+      "**Full Changelog**: https://github.com/user/repo/compare/v1.0.0...v1.0.1",
+    );
+    expect(result.indexOf("## [1.0.1]")).toBeLessThan(result.indexOf("**Full Changelog**"));
+    expect(result.indexOf("**Full Changelog**")).toBeLessThan(result.indexOf("### Bug Fixes"));
+  });
+
+  it("omits compare link on first release (no previous tag)", () => {
+    const result = generateChangelog(bump, "2026-03-14", "https://github.com/user/repo", {
+      config: { compareLink: true },
+      previousTag: null,
+      newTag: "v1.0.1",
+    });
+    expect(result).not.toContain("**Full Changelog**");
+  });
+
+  it("omits compare link when disabled", () => {
+    const result = generateChangelog(bump, "2026-03-14", "https://github.com/user/repo", {
+      config: { compareLink: false },
+      previousTag: "v1.0.0",
+      newTag: "v1.0.1",
+    });
+    expect(result).not.toContain("**Full Changelog**");
+  });
+
+  it("omits compare link when config is absent", () => {
+    const result = generateChangelog(bump, "2026-03-14", "https://github.com/user/repo", {
+      previousTag: "v1.0.0",
+      newTag: "v1.0.1",
+    });
+    expect(result).not.toContain("**Full Changelog**");
+  });
+
+  it("omits compare link when no repo url", () => {
+    const result = generateChangelog(bump, "2026-03-14", null, {
+      config: { compareLink: true },
+      previousTag: "v1.0.0",
+      newTag: "v1.0.1",
+    });
+    expect(result).not.toContain("**Full Changelog**");
+  });
+});
+
+describe("generateChangelog PR references", () => {
+  it("links PR references when repo url is available", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "1.0.1",
+      level: "patch",
+      commits: [makeCommit({ description: "fix crash (#123)" })],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", "https://github.com/user/repo");
+    expect(result).toContain("([#123](https://github.com/user/repo/pull/123))");
+  });
+
+  it("leaves PR references unchanged without repo url", () => {
+    const bump: VersionBump = {
+      packagePath: ".",
+      packageName: "my-tool",
+      currentVersion: "1.0.0",
+      newVersion: "1.0.1",
+      level: "patch",
+      commits: [makeCommit({ description: "fix crash (#123)" })],
+      propagated: false,
+    };
+    const result = generateChangelog(bump, "2026-03-14", null);
+    expect(result).toContain("fix crash (#123)");
+    expect(result).not.toContain("pull/123");
+  });
+});
+
 describe("insertChangelog", () => {
   it("prepends to empty changelog", () => {
     const result = insertChangelog("", "## [1.0.0] - 2026-03-14\n\n### Features\n\n- add login");

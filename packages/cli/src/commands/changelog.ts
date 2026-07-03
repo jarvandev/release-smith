@@ -15,7 +15,7 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const { bumps, isMonorepo } = await runPipeline(args.cwd);
+    const { bumps, isMonorepo, changelogConfig } = await runPipeline(args.cwd);
     const date = new Date().toISOString().slice(0, 10);
 
     if (bumps.length === 0) {
@@ -25,7 +25,7 @@ export default defineCommand({
 
     for (const bump of bumps) {
       if (isMonorepo) console.log(`\n--- ${bump.displayName} ---\n`);
-      console.log(generateChangelog(bump, date, null));
+      console.log(generateChangelog(bump, date, null, { config: changelogConfig }));
     }
   },
 });

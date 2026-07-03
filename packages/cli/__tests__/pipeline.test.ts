@@ -747,4 +747,64 @@ describe("pipeline integration", () => {
     expect(result.bumps).toHaveLength(1);
     expect(result.bumps[0].newVersion).toBe("1.1.0-beta.1");
   });
+
+  it("sets previousTag on bump from the latest tag", async () => {
+    await setupMonorepo(tempDir, [{ name: "@test/core", path: "packages/core" }]);
+    await tag(tempDir, "@test/core@1.0.0");
+    await commit(tempDir, "fix: a bug fix", "packages/core/src/index.ts");
+
+    const result = await runPipeline(tempDir);
+    expect(result.bumps).toHaveLength(1);
+    expect(result.bumps[0].previousTag).toBe("@test/core@1.0.0");
+  });
+
+  it("previousTag is null on first release", async () => {
+    await setupMonorepo(tempDir, [{ name: "@test/core", path: "packages/core" }]);
+    await commit(tempDir, "feat: first feature", "packages/core/src/index.ts");
+
+    const result = await runPipeline(tempDir);
+    expect(result.bumps).toHaveLength(1);
+    expect(result.bumps[0].previousTag).toBeNull();
+  });
+
+  it("returns changelog config from release-smith.json", async () => {
+    await setupMonorepo(tempDir, [{ name: "@test/core", path: "packages/core" }]);
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({
+        changelog: {
+          sections: [{ type: "perf", title: "Performance" }],
+          compareLink: true,
+        },
+      }),
+    );
+    await commit(tempDir, "feat: first feature", "packages/core/src/index.ts");
+
+    const result = await runPipeline(tempDir);
+    expect(result.changelogConfig?.sections).toEqual([{ type: "perf", title: "Performance" }]);
+    expect(result.changelogConfig?.compareLink).toBe(true);
+  });
+
+  it("keeps non-releasable commit types in bump commits for the changelog", async () => {
+    await setupMonorepo(tempDir, [{ name: "@test/core", path: "packages/core" }]);
+    await tag(tempDir, "@test/core@1.0.0");
+    await commit(tempDir, "perf: speed up parsing", "packages/core/src/perf.ts");
+    await commit(tempDir, "fix: a bug fix", "packages/core/src/index.ts");
+
+    const result = await runPipeline(tempDir);
+    expect(result.bumps).toHaveLength(1);
+    expect(result.bumps[0].level).toBe("patch");
+    const types = result.bumps[0].commits.map((c) => c.type);
+    expect(types).toContain("perf");
+    expect(types).toContain("fix");
+  });
+
+  it("non-releasable commit types alone do not trigger a release", async () => {
+    await setupMonorepo(tempDir, [{ name: "@test/core", path: "packages/core" }]);
+    await tag(tempDir, "@test/core@1.0.0");
+    await commit(tempDir, "perf: speed up parsing", "packages/core/src/perf.ts");
+
+    const result = await runPipeline(tempDir);
+    expect(result.bumps).toHaveLength(0);
+  });
 });

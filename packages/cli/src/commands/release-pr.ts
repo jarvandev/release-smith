@@ -1,4 +1,4 @@
-import type { ResolvedPackage } from "@release-smith/config";
+import type { ChangelogConfig, ResolvedPackage } from "@release-smith/config";
 import {
   applyReleaseChanges,
   buildCommitMessage,
@@ -25,6 +25,7 @@ interface ReleasePROptions {
   dryRun: boolean;
   tagFormat?: string;
   prLabels?: string[];
+  changelogConfig?: ChangelogConfig;
 }
 
 export async function runReleasePR(options: ReleasePROptions): Promise<void> {
@@ -73,6 +74,7 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
       packages,
       isMonorepo,
       tagFormat: options.tagFormat,
+      changelogConfig: options.changelogConfig,
     });
     const commitMsg = buildCommitMessage(results);
 

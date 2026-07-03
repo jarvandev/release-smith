@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ResolvedPackage } from "@release-smith/config";
+import type { ChangelogConfig, ResolvedPackage } from "@release-smith/config";
 import { createTag, execGit, getTagCommit, tagExists } from "@release-smith/git";
 import { createGitHubRelease, parseGitHubUrl } from "@release-smith/github";
 import semver from "semver";
@@ -88,6 +88,7 @@ export async function applyReleaseChanges(options: {
   packages: ResolvedPackage[];
   isMonorepo: boolean;
   tagFormat?: string;
+  changelogConfig?: ChangelogConfig;
 }): Promise<ReleaseResult[]> {
   const { cwd, bumps, packages, isMonorepo } = options;
   const format = resolveTagFormat(options.tagFormat, isMonorepo);
@@ -108,8 +109,12 @@ export async function applyReleaseChanges(options: {
   const versionMap = new Map(bumps.map((b) => [b.packageName, b.newVersion]));
 
   for (const bump of bumps) {
-    const changelog = generateChangelog(bump, date, repoUrl);
     const tagName = formatTagName(format, bump.displayName, bump.newVersion);
+    const changelog = generateChangelog(bump, date, repoUrl, {
+      config: options.changelogConfig,
+      previousTag: bump.previousTag,
+      newTag: tagName,
+    });
 
     const pkgDir = join(cwd, bump.packagePath);
     await updatePackageVersion(pkgDir, bump.newVersion);
@@ -237,6 +242,7 @@ export async function executeRelease(options: {
   dryRun: boolean;
   isMonorepo: boolean;
   tagFormat?: string;
+  changelogConfig?: ChangelogConfig;
 }): Promise<ReleaseResult[]> {
   const { cwd, bumps, packages, dryRun, isMonorepo } = options;
   const format = resolveTagFormat(options.tagFormat, isMonorepo);
@@ -252,13 +258,20 @@ export async function executeRelease(options: {
     } catch {
       /* no remote */
     }
-    return bumps.map((bump) => ({
-      packageName: bump.displayName,
-      packagePath: bump.packagePath,
-      version: bump.newVersion,
-      changelog: generateChangelog(bump, date, repoUrl),
-      tagName: formatTagName(format, bump.displayName, bump.newVersion),
-    }));
+    return bumps.map((bump) => {
+      const tagName = formatTagName(format, bump.displayName, bump.newVersion);
+      return {
+        packageName: bump.displayName,
+        packagePath: bump.packagePath,
+        version: bump.newVersion,
+        changelog: generateChangelog(bump, date, repoUrl, {
+          config: options.changelogConfig,
+          previousTag: bump.previousTag,
+          newTag: tagName,
+        }),
+        tagName,
+      };
+    });
   }
 
   await ensureCleanWorkingTree(cwd);
@@ -269,6 +282,7 @@ export async function executeRelease(options: {
     packages,
     isMonorepo,
     tagFormat: options.tagFormat,
+    changelogConfig: options.changelogConfig,
   });
 
   await stageReleaseChanges(cwd, packages, bumps);

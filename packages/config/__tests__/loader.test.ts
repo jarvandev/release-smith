@@ -144,6 +144,35 @@ describe("loadConfig", () => {
     warnSpy.mockRestore();
   });
 
+  it("loads changelog config", async () => {
+    const config = {
+      changelog: {
+        sections: [
+          { type: "feat", title: "New Features" },
+          { type: "perf", title: "Performance" },
+        ],
+        compareLink: true,
+      },
+    };
+    await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
+    const result = await loadConfig(tempDir);
+    expect(result?.changelog?.sections).toEqual([
+      { type: "feat", title: "New Features" },
+      { type: "perf", title: "Performance" },
+    ]);
+    expect(result?.changelog?.compareLink).toBe(true);
+  });
+
+  it("does not warn on changelog key", async () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
+    const config = { changelog: { compareLink: true } };
+    await writeFile(join(tempDir, "release-smith.json"), JSON.stringify(config));
+
+    await loadConfig(tempDir);
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it("loads per-package ignoreFiles", async () => {
     const config = {
       packages: {
