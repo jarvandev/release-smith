@@ -1,4 +1,9 @@
-import { discoverPackages, loadConfig, type ResolvedPackage } from "@release-smith/config";
+import {
+  type ChangelogConfig,
+  discoverPackages,
+  loadConfig,
+  type ResolvedPackage,
+} from "@release-smith/config";
 import {
   allFilesIgnored,
   applyVersionGroups,
@@ -35,6 +40,7 @@ export interface PipelineResult {
   isMonorepo: boolean;
   tagFormat: string;
   prLabels: string[];
+  changelogConfig?: ChangelogConfig;
 }
 
 export async function runPipeline(cwd: string, options?: PipelineOptions): Promise<PipelineResult> {
@@ -218,9 +224,13 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     bumps = applyVersionGroups(bumps, packages, config.groups, prereleaseOpts);
   }
 
+  for (const bump of bumps) {
+    bump.previousTag = packageTags.get(bump.packagePath) ?? null;
+  }
+
   const prLabels = config?.prLabels ?? ["autorelease: pending"];
 
-  return { packages, bumps, isMonorepo, tagFormat, prLabels };
+  return { packages, bumps, isMonorepo, tagFormat, prLabels, changelogConfig: config?.changelog };
 }
 
 function makeBump(

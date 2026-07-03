@@ -478,6 +478,79 @@ describe("applyReleaseChanges", () => {
     expect(changelog).toContain("add feature");
   });
 
+  it("passes changelog sections config through to the changelog", async () => {
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const changelogPath = join(pkgDir, "CHANGELOG.md");
+    const pkg = makePackage({ changelogPath });
+    const bump = makeBump({
+      commits: [
+        {
+          hash: "abc123",
+          type: "feat",
+          scope: null,
+          description: "add feature",
+          body: "",
+          breaking: false,
+          rawMessage: "feat: add feature",
+        },
+        {
+          hash: "def456",
+          type: "perf",
+          scope: null,
+          description: "speed up parsing",
+          body: "",
+          breaking: false,
+          rawMessage: "perf: speed up parsing",
+        },
+      ],
+    });
+    await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [pkg],
+      isMonorepo: true,
+      changelogConfig: { sections: [{ type: "perf", title: "Performance" }] },
+    });
+
+    const changelog = await readFile(changelogPath, "utf-8");
+    expect(changelog).toContain("### Performance");
+    expect(changelog).toContain("speed up parsing");
+  });
+
+  it("renders compare link when enabled and remote is resolvable", async () => {
+    await execGit(["remote", "add", "origin", "https://github.com/user/repo.git"], tempDir);
+    const pkgDir = join(tempDir, "packages/core");
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      join(pkgDir, "package.json"),
+      `${JSON.stringify({ name: "@myapp/core", version: "1.0.0" }, null, 2)}\n`,
+    );
+    await gitCommit(tempDir, "chore: init");
+
+    const changelogPath = join(pkgDir, "CHANGELOG.md");
+    const pkg = makePackage({ changelogPath });
+    const bump = makeBump({ previousTag: "@myapp/core@1.0.0" });
+    await applyReleaseChanges({
+      cwd: tempDir,
+      bumps: [bump],
+      packages: [pkg],
+      isMonorepo: true,
+      changelogConfig: { compareLink: true },
+    });
+
+    const changelog = await readFile(changelogPath, "utf-8");
+    expect(changelog).toContain(
+      "**Full Changelog**: https://github.com/user/repo/compare/@myapp/core@1.0.0...@myapp/core@1.1.0",
+    );
+  });
+
   it("updates workspace dependency versions", async () => {
     const coreDir = join(tempDir, "packages/core");
     const cliDir = join(tempDir, "packages/cli");

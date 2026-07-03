@@ -65,6 +65,7 @@ export default defineCommand({
       isMonorepo,
       tagFormat,
       prLabels,
+      changelogConfig,
     } = await runPipeline(args.cwd, { prerelease: args.prerelease });
 
     let bumps = allBumps;
@@ -91,6 +92,7 @@ export default defineCommand({
         dryRun,
         tagFormat,
         prLabels,
+        changelogConfig,
       });
       return;
     }
@@ -113,6 +115,7 @@ export default defineCommand({
       dryRun,
       isMonorepo,
       tagFormat,
+      changelogConfig,
     });
 
     if (!dryRun) {
