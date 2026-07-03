@@ -71,11 +71,13 @@ export default defineCommand({
     const targetPkgs = args.target ? args.target.split(",").map((s) => s.trim()) : [];
     if (targetPkgs.length > 0) {
       const targeted = new Set(targetPkgs);
-      const filtered = bumps.filter((b) => targeted.has(b.packageName));
-      const skipped = bumps.filter((b) => !targeted.has(b.packageName));
+      const matches = (b: (typeof bumps)[number]) =>
+        targeted.has(b.packageName) || targeted.has(b.displayName);
+      const filtered = bumps.filter(matches);
+      const skipped = bumps.filter((b) => !matches(b));
       if (skipped.length > 0) {
         console.warn(
-          `Warning: Skipping untargeted packages with pending changes: ${skipped.map((b) => b.packageName).join(", ")}`,
+          `Warning: Skipping untargeted packages with pending changes: ${skipped.map((b) => b.displayName).join(", ")}`,
         );
       }
       bumps = filtered;
@@ -103,7 +105,7 @@ export default defineCommand({
 
     for (const bump of bumps) {
       const suffix = bump.propagated ? " (dependency update)" : "";
-      console.log(`${bump.packageName}: ${bump.currentVersion} -> ${bump.newVersion}${suffix}`);
+      console.log(`${bump.displayName}: ${bump.currentVersion} -> ${bump.newVersion}${suffix}`);
     }
 
     const results = await executeRelease({

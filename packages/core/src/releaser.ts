@@ -109,7 +109,7 @@ export async function applyReleaseChanges(options: {
 
   for (const bump of bumps) {
     const changelog = generateChangelog(bump, date, repoUrl);
-    const tagName = formatTagName(format, bump.packageName, bump.newVersion);
+    const tagName = formatTagName(format, bump.displayName, bump.newVersion);
 
     const pkgDir = join(cwd, bump.packagePath);
     await updatePackageVersion(pkgDir, bump.newVersion);
@@ -120,7 +120,7 @@ export async function applyReleaseChanges(options: {
     await writeFile(pkg.changelogPath, newChangelog);
 
     results.push({
-      packageName: bump.packageName,
+      packageName: bump.displayName,
       packagePath: bump.packagePath,
       version: bump.newVersion,
       changelog,
@@ -208,11 +208,11 @@ export async function executeRelease(options: {
       /* no remote */
     }
     return bumps.map((bump) => ({
-      packageName: bump.packageName,
+      packageName: bump.displayName,
       packagePath: bump.packagePath,
       version: bump.newVersion,
       changelog: generateChangelog(bump, date, repoUrl),
-      tagName: formatTagName(format, bump.packageName, bump.newVersion),
+      tagName: formatTagName(format, bump.displayName, bump.newVersion),
     }));
   }
 

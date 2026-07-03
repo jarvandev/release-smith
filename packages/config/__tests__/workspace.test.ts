@@ -167,7 +167,8 @@ describe("discoverPackages", () => {
 
     const result = await discoverPackages(tempDir, config);
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("cli-node");
+    expect(result[0].name).toBe("@scope/cli");
+    expect(result[0].displayName).toBe("cli-node");
   });
 
   it("uses package.json name when config name is not set", async () => {
@@ -489,6 +490,38 @@ describe("discoverPackages", () => {
     expect(result[0].publish).toBe(false);
     expect(result[0].changelogPath).toBe(join(tempDir, "docs/CHANGELOG.md"));
     expect(result[0].from).toBe("abc1234");
+  });
+
+  it("keeps the npm name canonical and exposes the config override as displayName", async () => {
+    await createPackage(tempDir, {
+      name: "my-monorepo",
+      private: true,
+      workspaces: ["packages/*"],
+    });
+    await createPackage(join(tempDir, "packages/core"), {
+      name: "@scope/core",
+      version: "1.0.0",
+    });
+    await createPackage(join(tempDir, "packages/cli"), {
+      name: "@scope/cli",
+      version: "1.0.0",
+      dependencies: { "@scope/core": "workspace:*" },
+    });
+
+    const config: RawConfig = {
+      packages: {
+        "packages/core": { name: "core-pretty" },
+        "packages/cli": {},
+      },
+    };
+
+    const result = await discoverPackages(tempDir, config);
+    const core = result.find((p) => p.path === "packages/core")!;
+    const cli = result.find((p) => p.path === "packages/cli")!;
+    expect(core.name).toBe("@scope/core");
+    expect(core.displayName).toBe("core-pretty");
+    expect(cli.displayName).toBe("@scope/cli");
+    expect(cli.workspaceDeps).toEqual(["@scope/core"]);
   });
 
   it("single-package project defaults private package to publish: false", async () => {

@@ -48,7 +48,7 @@ export async function runReleasePR(options: ReleasePROptions): Promise<void> {
 
   for (const bump of bumps) {
     const suffix = bump.propagated ? " (dependency update)" : "";
-    console.log(`${bump.packageName}: ${bump.currentVersion} -> ${bump.newVersion}${suffix}`);
+    console.log(`${bump.displayName}: ${bump.currentVersion} -> ${bump.newVersion}${suffix}`);
   }
 
   if (dryRun) {

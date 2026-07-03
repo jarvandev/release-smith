@@ -24,7 +24,7 @@ export default defineCommand({
     }
 
     for (const bump of bumps) {
-      if (isMonorepo) console.log(`\n--- ${bump.packageName} ---\n`);
+      if (isMonorepo) console.log(`\n--- ${bump.displayName} ---\n`);
       console.log(generateChangelog(bump, date, null));
     }
   },

@@ -25,6 +25,7 @@ function makeCommit(overrides: Partial<ConventionalCommit> = {}): ConventionalCo
 function makePackage(overrides: Partial<ResolvedPackage> = {}): ResolvedPackage {
   return {
     name: "@myapp/core",
+    displayName: overrides.name ?? "@myapp/core",
     path: "packages/core",
     publish: true,
     changelogPath: "/tmp/CHANGELOG.md",
@@ -40,6 +41,7 @@ function makeBump(overrides: Partial<VersionBump> = {}): VersionBump {
   return {
     packagePath: "packages/core",
     packageName: "@myapp/core",
+    displayName: overrides.packageName ?? "@myapp/core",
     currentVersion: "1.0.0",
     newVersion: "1.0.1",
     level: "patch",

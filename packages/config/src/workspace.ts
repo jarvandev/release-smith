@@ -21,6 +21,7 @@ export async function discoverPackages(
     return [
       {
         name: rootPkg.name ?? dirName,
+        displayName: configEntry?.name ?? rootPkg.name ?? dirName,
         path: ".",
         publish: configEntry?.publish ?? !isPrivate,
         changelogPath: configEntry?.changelog
@@ -85,24 +86,30 @@ export async function discoverPackages(
     const workspaceDeps = [...new Set([...autoDetected, ...extra])];
 
     const dirName = relPath.split("/").pop() || relPath;
-    const name = configEntry?.name ?? pkg.name ?? dirName;
+    // The npm name stays canonical so the dependency graph (workspaceDeps,
+    // propagation, rollup) keeps working; the override only affects display.
+    const name = pkg.name ?? dirName;
+    const displayName = configEntry?.name ?? name;
     if (!pkg.name && !configEntry?.name) {
       console.warn(
         `Warning: Package at "${relPath}" has no name in package.json, using directory name "${dirName}" as fallback.`,
       );
     }
 
-    if (packageByName.has(name)) {
-      throw new Error(
-        `Duplicate package name "${name}" found in "${packageByName.get(name)}" and "${relPath}". ` +
-          "Add a unique name in package.json or use the config name override.",
-      );
+    for (const candidate of new Set([name, displayName])) {
+      if (packageByName.has(candidate)) {
+        throw new Error(
+          `Duplicate package name "${candidate}" found in "${packageByName.get(candidate)}" and "${relPath}". ` +
+            "Add a unique name in package.json or use the config name override.",
+        );
+      }
+      packageByName.set(candidate, relPath);
     }
-    packageByName.set(name, relPath);
 
     const pkgIgnoreFiles = configEntry?.ignoreFiles ?? [];
     resolved.push({
       name,
+      displayName,
       path: relPath,
       publish,
       changelogPath,

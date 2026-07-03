@@ -163,6 +163,7 @@ export function applyVersionGroups(
       const newBump: VersionBump = {
         packagePath: pkg.path,
         packageName: pkg.name,
+        displayName: pkg.displayName,
         currentVersion: pkg.version,
         newVersion: finalVersion,
         level: highestLevel,

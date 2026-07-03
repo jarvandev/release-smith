@@ -402,6 +402,7 @@ function makeBump(overrides: Partial<VersionBump> = {}): VersionBump {
   return {
     packagePath: "packages/core",
     packageName: "@myapp/core",
+    displayName: overrides.packageName ?? "@myapp/core",
     currentVersion: "1.0.0",
     newVersion: "1.1.0",
     level: "minor",

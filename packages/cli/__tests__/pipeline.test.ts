@@ -701,6 +701,42 @@ describe("pipeline integration", () => {
     expect(bbb.commits).toHaveLength(1);
   });
 
+  it("config name override does not break propagation or tag lookup", async () => {
+    await setupMonorepo(tempDir, [
+      { name: "@test/core", path: "packages/core" },
+      {
+        name: "@test/cli",
+        path: "packages/cli",
+        deps: { "@test/core": "workspace:*" },
+      },
+    ]);
+    await writeFile(
+      join(tempDir, "release-smith.json"),
+      JSON.stringify({
+        packages: {
+          "packages/core": { name: "core-pretty" },
+          "packages/cli": {},
+        },
+      }),
+    );
+    await execGit(["add", "."], tempDir);
+    await execGit(["commit", "-m", "chore: add config"], tempDir);
+    // Tags use the display name for the renamed package
+    await tag(tempDir, "core-pretty@1.0.0");
+    await tag(tempDir, "@test/cli@1.0.0");
+    await commit(tempDir, "feat: core change", "packages/core/src/index.ts");
+
+    const result = await runPipeline(tempDir);
+    const core = result.bumps.find((b) => b.packagePath === "packages/core")!;
+    const cli = result.bumps.find((b) => b.packagePath === "packages/cli")!;
+    expect(core.packageName).toBe("@test/core");
+    expect(core.displayName).toBe("core-pretty");
+    expect(core.newVersion).toBe("1.1.0");
+    expect(cli).toBeDefined();
+    expect(cli.newVersion).toBe("1.0.1");
+    expect(cli.propagated).toBe(true);
+  });
+
   it("prerelease without a stable tag continues the sequence instead of drifting", async () => {
     await setupMonorepo(tempDir, [
       { name: "@test/core", path: "packages/core", version: "1.1.0-beta.0" },

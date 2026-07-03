@@ -74,7 +74,7 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
       packageTags.set(pkg.path, null);
       continue;
     }
-    const prefix = resolveTagPrefix(tagFormat, pkg.name);
+    const prefix = resolveTagPrefix(tagFormat, pkg.displayName);
     const tag = findLatestVersionTag(allTags, prefix);
     packageTags.set(pkg.path, tag);
   }
@@ -86,7 +86,7 @@ export async function runPipeline(cwd: string, options?: PipelineOptions): Promi
     for (const pkg of packages) {
       const tag = packageTags.get(pkg.path);
       if (tag) {
-        const prefix = resolveTagPrefix(tagFormat, pkg.name);
+        const prefix = resolveTagPrefix(tagFormat, pkg.displayName);
         lastStableVersions.set(pkg.path, tag.slice(prefix.length));
       }
       // No stable tag: leave the entry unset so bumpPrerelease continues
@@ -259,6 +259,7 @@ function makeBump(
   return {
     packagePath: pkg.path,
     packageName: pkg.name,
+    displayName: pkg.displayName,
     currentVersion: pkg.version,
     newVersion,
     level,
